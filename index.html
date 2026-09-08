@@ -517,8 +517,8 @@
   </div>
   <form id="lg-student" hidden>
     <div class="field">
-      <label for="l-sid">학번</label>
-      <input type="text" id="l-sid" inputmode="numeric" placeholder="20601" maxlength="5" autocomplete="off">
+      <label for="l-sid">학번 다섯 자리</label>
+      <input type="text" id="l-sid" inputmode="numeric" maxlength="5" autocomplete="off">
     </div>
     <p class="form-err" id="lg-sid-err" hidden></p>
     <div class="sheet-actions">
@@ -551,13 +551,14 @@
   <form id="nt-form">
     <div class="field">
       <label for="n-title">제목</label>
-      <input type="text" id="n-title" placeholder="예) 내일 체육복 등교" autocomplete="off">
+      <input type="text" id="n-title" autocomplete="off">
     </div>
     <div class="field">
       <label for="n-body">내용</label>
-      <textarea id="n-body" rows="5" placeholder="예) 3~4교시 스포츠생활2 수업이 있어 체육복을 입고 등교합니다."></textarea>
+      <textarea id="n-body" rows="5"></textarea>
     </div>
     <label class="check-row"><input type="checkbox" id="n-pin"> 맨 위에 고정</label>
+    <p class="form-err" id="nt-err" hidden></p>
     <div class="sheet-actions">
       <button type="button" class="btn danger" id="n-delete" hidden>삭제</button>
       <button type="button" class="btn" data-close>취소</button>
@@ -578,15 +579,15 @@
     </div>
     <div class="field">
       <label for="r-title">자료 이름</label>
-      <input type="text" id="r-title" placeholder="예) 2027 수시 전형 일정 정리" autocomplete="off">
+      <input type="text" id="r-title" autocomplete="off">
     </div>
     <div class="field">
-      <label for="r-url">링크 주소</label>
-      <input type="url" id="r-url" placeholder="https://" inputmode="url" autocomplete="off">
+      <label for="r-url">링크 주소 — https:// 로 시작해야 합니다</label>
+      <input type="url" id="r-url" inputmode="url" autocomplete="off">
     </div>
     <div class="field">
       <label for="r-desc">설명</label>
-      <textarea id="r-desc" placeholder="예) 우리 학교 기준으로 정리한 표입니다."></textarea>
+      <textarea id="r-desc"></textarea>
     </div>
     <label class="check-row"><input type="checkbox" id="r-pin"> 맨 위에 고정</label>
     <p class="form-err" id="rs-err" hidden></p>
@@ -610,7 +611,7 @@
     </div>
     <div class="field">
       <label for="f-title">제목</label>
-      <input type="text" id="f-title" placeholder="예) 독서와작문 서평 발표" autocomplete="off">
+      <input type="text" id="f-title" autocomplete="off">
     </div>
     <div class="row2">
       <div class="field">
@@ -618,15 +619,16 @@
         <input type="date" id="f-date">
       </div>
       <div class="field">
-        <label for="f-subject">과목</label>
-        <input type="text" id="f-subject" list="subject-list" placeholder="선택" autocomplete="off">
+        <label for="f-subject">과목 (없어도 됩니다)</label>
+        <input type="text" id="f-subject" list="subject-list" autocomplete="off">
         <datalist id="subject-list"></datalist>
       </div>
     </div>
     <div class="field">
-      <label for="f-memo">안내 · 준비물</label>
-      <textarea id="f-memo" placeholder="예) 발표 4분, 발표 자료 6장 이내"></textarea>
+      <label for="f-memo">안내</label>
+      <textarea id="f-memo"></textarea>
     </div>
+    <p class="form-err" id="ev-err" hidden></p>
     <div class="sheet-actions">
       <button type="button" class="btn danger" id="f-delete" hidden>삭제</button>
       <button type="button" class="btn" data-close>취소</button>
@@ -647,7 +649,7 @@
     </div>
     <div class="field">
       <label for="b-reason">무슨 이야기를 하고 싶은지 (선생님만 봅니다)</label>
-      <textarea id="b-reason" rows="4" placeholder="예) 2학기 수시 원서 때문에 여쭤보고 싶어요"></textarea>
+      <textarea id="b-reason" rows="4"></textarea>
     </div>
     <p class="form-err" id="bk-err" hidden></p>
     <div class="sheet-actions">
@@ -695,8 +697,9 @@
     </div>
     <div class="field">
       <label for="e-text">내용</label>
-      <textarea id="e-text" rows="6" placeholder="관찰한 사실을 그대로 적어 두면 학기말에 종합의견을 쓸 때 그대로 쓸 수 있습니다."></textarea>
+      <textarea id="e-text" rows="6"></textarea>
     </div>
+    <p class="form-err" id="en-err" hidden></p>
     <div class="sheet-actions">
       <button type="button" class="btn danger" id="e-delete" hidden>삭제</button>
       <button type="button" class="btn" data-close>취소</button>
@@ -713,7 +716,7 @@
   <form id="ro-form">
     <div class="field">
       <label for="ro-text">명단</label>
-      <textarea id="ro-text" rows="10" placeholder="20601 강지원&#10;20602 고현&#10;20603 권성현"></textarea>
+      <textarea id="ro-text" rows="10"></textarea>
     </div>
     <p class="form-err" id="ro-err" hidden></p>
     <div class="sheet-actions">
@@ -764,11 +767,10 @@ var FIREBASE_CONFIG = {
   COUNSEL.forEach(function(c){ COUNSEL_MAP[c.key] = c; });
 
   var TYPES = [
-    {id:"perf", label:"수행평가", color:"var(--t-perf)"},
-    {id:"exam", label:"지필고사", color:"var(--t-exam)"},
-    {id:"task", label:"과제",     color:"var(--t-task)"},
-    {id:"prep", label:"준비물",   color:"var(--t-prep)"},
-    {id:"etc",  label:"기타",     color:"var(--t-etc)"}
+    {id:"perf",   label:"수행평가",  color:"var(--t-perf)"},
+    {id:"exam",   label:"지필고사",  color:"var(--t-exam)"},
+    {id:"school", label:"학교 행사", color:"var(--t-task)"},
+    {id:"etc",    label:"기타",      color:"var(--t-etc)"}
   ];
   var TYPE_MAP = {};
   TYPES.forEach(function(t){ TYPE_MAP[t.id] = t; });
@@ -800,14 +802,26 @@ var FIREBASE_CONFIG = {
   function pad(n){ return n < 10 ? "0" + n : "" + n; }
   function iso(d){ return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()); }
   function parseISO(s){ var p = String(s).split("-"); return new Date(+p[0], +p[1]-1, +p[2]); }
-  function today(){ var d = new Date(); d.setHours(0,0,0,0); return d; }
+
+  // 기기 시계가 어느 나라로 맞춰져 있든 한국 시간(UTC+9)으로 봅니다.
+  // 날짜가 바뀌는 기준은 한국 시간 자정입니다.
+  function kstNow(){
+    var d = new Date();
+    return new Date(d.getTime() + (d.getTimezoneOffset() + 540) * 60000);
+  }
+  function today(){ var d = kstNow(); d.setHours(0,0,0,0); return d; }
   function addDays(d, n){ var x = new Date(d.getTime()); x.setDate(x.getDate()+n); return x; }
   function diffDays(a, b){ return Math.round((parseISO(a) - parseISO(b)) / 86400000); }
   function ddayText(n){ return n === 0 ? "D-DAY" : (n > 0 ? "D-" + n : "D+" + (-n)); }
   function mdText(s){ var d = parseISO(s); return (d.getMonth()+1) + "월 " + d.getDate() + "일 (" + DOW_KO[d.getDay()] + ")"; }
   function toMin(hm){ var p = hm.split(":"); return (+p[0])*60 + (+p[1]); }
-  function nowMin(){ var d = new Date(); return d.getHours()*60 + d.getMinutes(); }
+  function nowMin(){ var d = kstNow(); return d.getHours()*60 + d.getMinutes(); }
   var TODAY = iso(today());
+
+  // 면담은 당일 신청을 받지 않습니다(한국 시간 자정 기준). 선생님은 예외입니다.
+  function bookableDate(dateStr){
+    return State.teacher || diffDays(dateStr, iso(today())) >= 1;
+  }
 
   /* ---------------- 시간표 데이터 ---------------- */
   function parseTT(str){ return String(str).split(",").map(Number); }
@@ -991,6 +1005,27 @@ var FIREBASE_CONFIG = {
   }
 
   /* ---------------- 쓰기 ---------------- */
+  // 저장에 실패했을 때, 왜 실패했는지 그대로 알려 줍니다.
+  function saveErrText(e){
+    var code = (e && e.code) || "";
+    if(code === "permission-denied"){
+      var who = (State.user && State.user.email) || "(로그인 정보 없음)";
+      return "이 계정에는 쓰기 권한이 없습니다.\n로그인한 계정: " + who +
+             "\nFirestore 규칙의 TEACHER_EMAIL 자리가 이 주소와 똑같은지 확인해 주세요.";
+    }
+    if(code === "unavailable" || code === "failed-precondition")
+      return "서버에 닿지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.";
+    if(!State.teacher) return "선생님으로 로그인해야 저장할 수 있습니다.";
+    return "저장하지 못했습니다." + (code ? " (" + code + ")" : "");
+  }
+  function showErr(id, msg){
+    var n = $(id);
+    if(!n){ toast(msg.split("\n")[0]); return; }
+    n.textContent = msg;
+    n.style.whiteSpace = "pre-wrap";
+    n.hidden = false;
+  }
+
   function put(coll, id, data, localArr){
     if(State.cloud) return FB.db.collection(coll).doc(id).set(data);
     var arr = State[localArr];
@@ -1130,8 +1165,9 @@ var FIREBASE_CONFIG = {
     for(var i = 0; i < State.bookings.length; i++) if(State.bookings[i].id === id) return State.bookings[i];
     return null;
   }
+  // 학생 화면은 내일부터, 선생님 화면은 오늘부터 보여 줍니다.
   function weekdaysAhead(n){
-    var out = [], d = today(), guard = 0;
+    var out = [], d = addDays(today(), State.teacher ? 0 : 1), guard = 0;
     while(out.length < n && guard < 60){
       var dw = d.getDay();
       if(dw >= 1 && dw <= 5) out.push(iso(d));
@@ -1454,10 +1490,14 @@ var FIREBASE_CONFIG = {
     }
     card.appendChild(when);
     if(!booking){
-      var btn = el("button", "slot-btn", "신청");
-      btn.type = "button";
-      btn.addEventListener("click", function(){ openBooking(date, c); });
-      card.appendChild(btn);
+      if(bookableDate(date)){
+        var btn = el("button", "slot-btn", "신청");
+        btn.type = "button";
+        btn.addEventListener("click", function(){ openBooking(date, c); });
+        card.appendChild(btn);
+      } else {
+        card.appendChild(el("span", "pill", "당일 신청 불가"));
+      }
     } else if(mine || State.teacher){
       card.appendChild(el("span", "pill" + (mine ? " mine" : ""), mine ? "내 예약" : "예약됨"));
       if(State.teacher){
@@ -1503,8 +1543,8 @@ var FIREBASE_CONFIG = {
     clear(box);
     COUNSEL.forEach(function(c){ box.appendChild(slotCard(meetDate, c, bookingAt(meetDate, c.key), false)); });
     $("meet-hint").textContent = State.teacher
-      ? "‘옮기기’로 다른 날짜·시간대로 보낼 수 있습니다. 학생 화면에는 ‘예약됨’만 보이고, 학번과 적은 내용은 선생님만 봅니다."
-      : "한 시간대에 한 명만 들어갑니다. 이미 찬 자리는 신청할 수 없고, 적은 내용은 선생님만 볼 수 있어요.";
+      ? "‘옮기기’로 다른 날짜·시간대로 보낼 수 있습니다. 학생 화면에는 ‘예약됨’만 보이고, 학번과 적은 내용은 선생님만 봅니다. 학생은 오늘 자리를 신청할 수 없습니다."
+      : "한 시간대에 한 명만 들어갑니다. 면담은 하루 전까지 신청해 주세요. 적은 내용은 선생님만 볼 수 있습니다.";
 
     var mineSec = $("meet-mine-sec"), mineBox = $("meet-mine");
     clear(mineBox);
@@ -1899,13 +1939,15 @@ var FIREBASE_CONFIG = {
     $("n-body").value = n ? n.body : "";
     $("n-pin").checked = n ? !!n.pinned : false;
     $("n-delete").hidden = !n;
+    $("nt-err").hidden = true;
     openSheet("sheet-notice");
     if(!n) setTimeout(function(){ $("n-title").focus(); }, 280);
   }
   $("nt-form").addEventListener("submit", function(e){
     e.preventDefault();
+    $("nt-err").hidden = true;
     var title = $("n-title").value.trim();
-    if(!title){ toast("제목을 적어 주세요"); return; }
+    if(!title){ showErr("nt-err", "제목을 적어 주세요."); $("n-title").focus(); return; }
     var was = editingNotice;
     put("notices", was ? was.id : uid(), {
       title:title, body:$("n-body").value.trim(), pinned:$("n-pin").checked,
@@ -1913,7 +1955,7 @@ var FIREBASE_CONFIG = {
       createdAt: was ? (was.createdAt || Date.now()) : Date.now()
     }, "notices").then(function(){
       closeSheets(); toast(was ? "고쳤습니다" : "올렸습니다");
-    })["catch"](function(){ toast("저장하지 못했습니다"); });
+    })["catch"](function(err){ showErr("nt-err", saveErrText(err)); });
   });
   $("n-delete").addEventListener("click", function(){
     if(!editingNotice || !window.confirm("이 전달사항을 지울까요?")) return;
@@ -1965,7 +2007,7 @@ var FIREBASE_CONFIG = {
       createdAt: was ? (was.createdAt || Date.now()) : Date.now()
     }, "resources").then(function(){
       closeSheets(); toast(was ? "고쳤습니다" : "올렸습니다");
-    })["catch"](function(){ toast("저장하지 못했습니다"); });
+    })["catch"](function(err){ showErr("rs-err", saveErrText(err)); });
   });
   $("r-delete").addEventListener("click", function(){
     if(!editingRes || !window.confirm("이 자료를 지울까요?")) return;
@@ -1996,6 +2038,7 @@ var FIREBASE_CONFIG = {
     $("f-subject").value = ev.subject || "";
     $("f-memo").value = ev.memo || "";
     $("f-delete").hidden = !editingEvent;
+    $("ev-err").hidden = true;
     renderTypePicks();
     var dl = $("subject-list");
     clear(dl);
@@ -2009,15 +2052,16 @@ var FIREBASE_CONFIG = {
   }
   $("ev-form").addEventListener("submit", function(e){
     e.preventDefault();
+    $("ev-err").hidden = true;
     var title = $("f-title").value.trim();
-    if(!title){ toast("제목을 적어 주세요"); return; }
+    if(!title){ showErr("ev-err", "제목을 적어 주세요."); $("f-title").focus(); return; }
     var was = editingEvent;
     put("events", was ? was.id : uid(), {
       type:sheetType, title:title, date:$("f-date").value || TODAY,
       subject:$("f-subject").value.trim(), memo:$("f-memo").value.trim()
     }, "events").then(function(){
       closeSheets(); toast(was ? "고쳤습니다" : "올렸습니다");
-    })["catch"](function(){ toast("저장하지 못했습니다"); });
+    })["catch"](function(err){ showErr("ev-err", saveErrText(err)); });
   });
   $("f-delete").addEventListener("click", function(){
     if(!editingEvent || !window.confirm("이 일정을 지울까요?")) return;
@@ -2053,6 +2097,11 @@ var FIREBASE_CONFIG = {
     var err = $("bk-err");
     err.hidden = true;
     if(!sid){ err.textContent = "학번을 골라 주세요."; err.hidden = false; return; }
+    if(!bookableDate(bookTarget.date)){
+      err.textContent = "면담은 하루 전까지 신청해야 합니다. 내일 이후로 골라 주세요.";
+      err.hidden = false;
+      return;
+    }
     lsSet("a26.me", {sid:sid});
     createBooking(bookTarget.date, bookTarget.slot, sid, $("b-reason").value.trim())
       .then(function(){ closeSheets(); toast("신청했습니다"); })
@@ -2134,6 +2183,7 @@ var FIREBASE_CONFIG = {
     $("e-date").value = en ? en.date : TODAY;
     $("e-text").value = en ? en.text : "";
     $("e-delete").hidden = !en;
+    $("en-err").hidden = true;
     renderKindPicks();
     openSheet("sheet-entry");
     if(!en) setTimeout(function(){ $("e-text").focus(); }, 280);
@@ -2151,7 +2201,7 @@ var FIREBASE_CONFIG = {
       createdAt: was ? (was.createdAt || Date.now()) : Date.now()
     }).then(function(){
       closeSheets(); toast(was ? "고쳤습니다" : "저장했습니다");
-    })["catch"](function(){ toast("저장하지 못했습니다"); });
+    })["catch"](function(err){ showErr("en-err", saveErrText(err)); });
   });
   $("e-delete").addEventListener("click", function(){
     if(!editingEntry || !window.confirm("이 기록을 지울까요?")) return;
@@ -2201,7 +2251,7 @@ var FIREBASE_CONFIG = {
       closeSheets();
       toast(rows.length + "명 등록했습니다");
       render();
-    })["catch"](function(){ toast("등록하지 못했습니다"); });
+    })["catch"](function(err){ showErr("ro-err", saveErrText(err)); });
   });
 
   /* ---------------- 기타 ---------------- */
