@@ -641,24 +641,40 @@
   <h2 id="bk-title">면담 신청</h2>
   <p class="lead" id="bk-when"></p>
   <form id="bk-form">
-    <div class="row2">
-      <div class="field">
-        <label for="b-name">이름</label>
-        <input type="text" id="b-name" placeholder="홍길동" autocomplete="name">
-      </div>
-      <div class="field">
-        <label for="b-sid">학번</label>
-        <input type="text" id="b-sid" placeholder="20601" inputmode="numeric" maxlength="5" autocomplete="off">
-      </div>
+    <div class="field">
+      <label for="b-sid">학번</label>
+      <select id="b-sid"></select>
     </div>
     <div class="field">
-      <label for="b-reason">면담 내용 (선생님만 봅니다)</label>
-      <textarea id="b-reason" placeholder="예) 진로 상담이요"></textarea>
+      <label for="b-reason">무슨 이야기를 하고 싶은지 (선생님만 봅니다)</label>
+      <textarea id="b-reason" rows="4" placeholder="예) 2학기 수시 원서 때문에 여쭤보고 싶어요"></textarea>
     </div>
     <p class="form-err" id="bk-err" hidden></p>
     <div class="sheet-actions">
       <button type="button" class="btn" data-close>취소</button>
       <button type="submit" class="btn primary">신청하기</button>
+    </div>
+  </form>
+</div>
+
+<!-- 면담 시간 옮기기 (선생님 전용) -->
+<div class="sheet" id="sheet-move" role="dialog" aria-modal="true" aria-labelledby="mv-title">
+  <div class="grabber"></div>
+  <h2 id="mv-title">면담 시간 옮기기</h2>
+  <p class="lead" id="mv-from"></p>
+  <form id="mv-form">
+    <div class="field">
+      <label for="m-date">옮길 날짜</label>
+      <input type="date" id="m-date">
+    </div>
+    <div class="field">
+      <label>옮길 시간대</label>
+      <div class="picks" id="move-picks"></div>
+    </div>
+    <p class="form-err" id="mv-err" hidden></p>
+    <div class="sheet-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button type="submit" class="btn primary">옮기기</button>
     </div>
   </form>
 </div>
@@ -1015,22 +1031,38 @@ var FIREBASE_CONFIG = {
   }
 
   function bookingId(date, slot){ return date + "_" + slot; }
-  function createBooking(date, slot, name, sid, reason){
+
+  // 신청자 표시: 명단이 있으면 이름까지, 없으면 학번만
+  function whoLabel(sid){
+    if(!sid) return "학번 없음";
+    var nm = State.roster[sid];
+    return nm ? sid + " " + nm : sid;
+  }
+
+  function createBooking(date, slot, sid, reason, client){
     var id = bookingId(date, slot);
+    var owner = client || CLIENT;
     if(State.cloud){
-      return FB.db.collection("bookings").doc(id).set({date:date, slot:slot, client:CLIENT, createdAt:Date.now()})
+      // 자리 잡기는 create 라서 이미 찬 자리면 서버가 거부합니다.
+      return FB.db.collection("bookings").doc(id)
+        .set({date:date, slot:slot, client:owner, createdAt:Date.now()})
+        .then(function(){
+          // 지난 신청의 찌꺼기가 남아 있으면 먼저 치웁니다.
+          return FB.db.collection("bookingDetails").doc(id)["delete"]()["catch"](function(){});
+        })
         .then(function(){
           return FB.db.collection("bookingDetails").doc(id).set({
-            name:name, klass:sid, reason:reason, client:CLIENT, createdAt:Date.now()
+            name:"", klass:sid, reason:reason, client:owner, createdAt:Date.now()
           });
         });
     }
     if(State.bookings.some(function(b){ return b.id === id; })) return Promise.reject(new Error("taken"));
-    State.bookings.push({id:id, date:date, slot:slot, client:CLIENT});
-    State.details[id] = {name:name, klass:sid, reason:reason, client:CLIENT};
+    State.bookings.push({id:id, date:date, slot:slot, client:owner});
+    State.details[id] = {name:"", klass:sid, reason:reason, client:owner};
     Local.save(); render();
     return Promise.resolve();
   }
+
   function cancelBooking(id){
     if(State.cloud){
       return FB.db.collection("bookings").doc(id)["delete"]().then(function(){
@@ -1041,6 +1073,18 @@ var FIREBASE_CONFIG = {
     delete State.details[id];
     Local.save(); render();
     return Promise.resolve();
+  }
+
+  // 선생님이 예약을 다른 날짜·시간대로 옮깁니다.
+  function moveBooking(oldId, newDate, newSlot){
+    var newId = bookingId(newDate, newSlot);
+    if(newId === oldId) return Promise.reject(new Error("same"));
+    if(State.bookings.some(function(b){ return b.id === newId; })) return Promise.reject(new Error("taken"));
+    var d = State.details[oldId] || {};
+    var old = null;
+    State.bookings.forEach(function(b){ if(b.id === oldId) old = b; });
+    return createBooking(newDate, newSlot, d.klass || "", d.reason || "", (old && old.client) || CLIENT)
+      .then(function(){ return cancelBooking(oldId); });
   }
 
   /* ---------------- 조각 ---------------- */
@@ -1405,7 +1449,7 @@ var FIREBASE_CONFIG = {
     when.appendChild(el("div", "slot-time", (compact ? "" : mdText(date) + " · ") + c.s + "–" + c.e));
     if(booking && State.teacher){
       var d = State.details[booking.id];
-      var line = d ? ((d.klass ? d.klass + " " : "") + (d.name || "이름 없음") + (d.reason ? "\n" + d.reason : "")) : "신청자 정보를 불러오는 중";
+      var line = d ? (whoLabel(d.klass) + (d.reason ? "\n" + d.reason : "")) : "신청자 정보를 불러오는 중";
       when.appendChild(el("div", "slot-detail", line));
     }
     card.appendChild(when);
@@ -1416,6 +1460,12 @@ var FIREBASE_CONFIG = {
       card.appendChild(btn);
     } else if(mine || State.teacher){
       card.appendChild(el("span", "pill" + (mine ? " mine" : ""), mine ? "내 예약" : "예약됨"));
+      if(State.teacher){
+        var mbtn = el("button", "slot-btn", "옮기기");
+        mbtn.type = "button";
+        mbtn.addEventListener("click", function(){ openMove(booking, date, c); });
+        card.appendChild(mbtn);
+      }
       var cbtn = el("button", "slot-btn ghost", "취소");
       cbtn.type = "button";
       cbtn.addEventListener("click", function(){
@@ -1453,8 +1503,8 @@ var FIREBASE_CONFIG = {
     clear(box);
     COUNSEL.forEach(function(c){ box.appendChild(slotCard(meetDate, c, bookingAt(meetDate, c.key), false)); });
     $("meet-hint").textContent = State.teacher
-      ? "선생님 화면에서는 신청자 학번·이름과 면담 내용이 보입니다. 학생 화면에는 ‘예약됨’만 표시됩니다."
-      : "한 시간대에 한 명씩 신청할 수 있어요. 적은 내용은 선생님만 볼 수 있습니다.";
+      ? "‘옮기기’로 다른 날짜·시간대로 보낼 수 있습니다. 학생 화면에는 ‘예약됨’만 보이고, 학번과 적은 내용은 선생님만 봅니다."
+      : "한 시간대에 한 명만 들어갑니다. 이미 찬 자리는 신청할 수 없고, 적은 내용은 선생님만 볼 수 있어요.";
 
     var mineSec = $("meet-mine-sec"), mineBox = $("meet-mine");
     clear(mineBox);
@@ -1764,7 +1814,7 @@ var FIREBASE_CONFIG = {
   }
   function closeSheets(){
     $("scrim").classList.remove("open");
-    ["sheet-login","sheet-notice","sheet-res","sheet-event","sheet-book","sheet-entry","sheet-roster"]
+    ["sheet-login","sheet-notice","sheet-res","sheet-event","sheet-book","sheet-move","sheet-entry","sheet-roster"]
       .forEach(function(id){ $(id).classList.remove("open"); });
   }
   $("scrim").addEventListener("click", closeSheets);
@@ -1979,28 +2029,85 @@ var FIREBASE_CONFIG = {
   function openBooking(date, c){
     bookTarget = {date:date, slot:c.key};
     $("bk-when").textContent = mdText(date) + " · " + c.label + " " + c.s + "–" + c.e;
+    var sel = $("b-sid");
+    clear(sel);
+    var ph = document.createElement("option");
+    ph.value = ""; ph.textContent = "학번을 고르세요";
+    sel.appendChild(ph);
+    SIDS.forEach(function(id){
+      var o = document.createElement("option");
+      o.value = id; o.textContent = id;
+      sel.appendChild(o);
+    });
     var last = lsGet("a26.me") || {};
-    $("b-name").value = last.name || "";
-    $("b-sid").value = State.sid || last.sid || "";
+    sel.value = State.sid || last.sid || "";
     $("b-reason").value = "";
     $("bk-err").hidden = true;
     openSheet("sheet-book");
-    setTimeout(function(){ ($("b-name").value ? $("b-reason") : $("b-name")).focus(); }, 280);
+    setTimeout(function(){ (sel.value ? $("b-reason") : sel).focus(); }, 280);
   }
   $("bk-form").addEventListener("submit", function(e){
     e.preventDefault();
     if(!bookTarget) return;
-    var name = $("b-name").value.trim();
-    if(!name){ toast("이름을 적어 주세요"); return; }
-    var sid = $("b-sid").value.trim();
-    lsSet("a26.me", {name:name, sid:sid});
-    createBooking(bookTarget.date, bookTarget.slot, name, sid, $("b-reason").value.trim())
+    var sid = $("b-sid").value;
+    var err = $("bk-err");
+    err.hidden = true;
+    if(!sid){ err.textContent = "학번을 골라 주세요."; err.hidden = false; return; }
+    lsSet("a26.me", {sid:sid});
+    createBooking(bookTarget.date, bookTarget.slot, sid, $("b-reason").value.trim())
       .then(function(){ closeSheets(); toast("신청했습니다"); })
       ["catch"](function(){
-        var err = $("bk-err");
         err.textContent = "방금 다른 친구가 이 시간을 예약했어요. 다른 시간대를 골라 주세요.";
         err.hidden = false;
         render();
+      });
+  });
+
+  /* 면담 시간 옮기기 */
+  var moveFrom = null, moveSlot = "am";
+  function renderMovePicks(){
+    var box = $("move-picks");
+    clear(box);
+    COUNSEL.forEach(function(c){
+      var b = el("button", "pick", c.label);
+      b.type = "button";
+      b.style.setProperty("--tc", "var(--t-task)");
+      b.setAttribute("aria-pressed", moveSlot === c.key ? "true" : "false");
+      b.addEventListener("click", function(){ moveSlot = c.key; renderMovePicks(); });
+      box.appendChild(b);
+    });
+  }
+  function openMove(booking, date, c){
+    moveFrom = booking;
+    moveSlot = c.key;
+    var d = State.details[booking.id] || {};
+    $("mv-from").textContent = whoLabel(d.klass) + " · 지금은 " + mdText(date) + " " + c.label + " " + c.s + "–" + c.e;
+    $("m-date").value = date;
+    $("mv-err").hidden = true;
+    renderMovePicks();
+    openSheet("sheet-move");
+  }
+  $("mv-form").addEventListener("submit", function(e){
+    e.preventDefault();
+    if(!moveFrom) return;
+    var err = $("mv-err");
+    err.hidden = true;
+    var nd = $("m-date").value;
+    if(!nd){ err.textContent = "날짜를 골라 주세요."; err.hidden = false; return; }
+    var dw = parseISO(nd).getDay();
+    if(dw === 0 || dw === 6){ err.textContent = "주말에는 면담 시간이 없습니다."; err.hidden = false; return; }
+    moveBooking(moveFrom.id, nd, moveSlot)
+      .then(function(){
+        closeSheets();
+        meetDate = nd;
+        toast(mdText(nd) + " " + COUNSEL_MAP[moveSlot].label + "으로 옮겼습니다");
+        render();
+      })
+      ["catch"](function(ex){
+        err.textContent = (ex && ex.message === "same")
+          ? "지금과 같은 시간입니다."
+          : "그 자리에는 이미 다른 학생이 있습니다. 먼저 그 예약을 정리해 주세요.";
+        err.hidden = false;
       });
   });
 
