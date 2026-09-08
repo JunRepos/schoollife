@@ -2,6 +2,12 @@ rules_version = '2';
 
 // Firebase 콘솔 > Firestore Database > 규칙 에 그대로 붙여넣고 [게시] 하세요.
 // TEACHER_EMAIL 자리에 선생님 계정 이메일을 넣어야 합니다.
+//
+// 요약
+//   전달사항 · 자료실 · 학급 일정 → 누구나 읽기, 선생님만 쓰기
+//   면담 예약(자리 참/빔)          → 누구나 읽기, 누구나 신청, 중복은 서버가 거부
+//   신청자 이름 · 면담 내용        → 선생님만 읽기
+//   학생 명단 · 누가기록           → 선생님만 읽고 쓰기 (가장 민감한 자료)
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -11,17 +17,16 @@ service cloud.firestore {
           && request.auth.token.email in ['TEACHER_EMAIL'];
     }
 
-    // ── 전달사항 · 학급 일정 · 시간표 ────────────────────────────
-    // 누구나 읽고, 선생님만 씁니다.
+    // ── 학생도 보는 것 ────────────────────────────────────────────
     match /notices/{id} {
       allow read: if true;
       allow write: if isTeacher();
     }
-    match /events/{id} {
+    match /resources/{id} {
       allow read: if true;
       allow write: if isTeacher();
     }
-    match /timetable/{id} {
+    match /events/{id} {
       allow read: if true;
       allow write: if isTeacher();
     }
@@ -33,7 +38,7 @@ service cloud.firestore {
       allow create: if request.resource.data.keys().hasOnly(['date', 'slot', 'client', 'createdAt'])
                     && request.resource.data.date is string
                     && request.resource.data.slot in ['am', 'lunch', 'pm'];
-      allow delete: if true;          // 학생 본인 취소용 (아래 README 주의사항 참고)
+      allow delete: if true;          // 학생 본인 취소용 (README 주의사항 참고)
       allow update: if isTeacher();
     }
 
@@ -46,6 +51,21 @@ service cloud.firestore {
                     && request.resource.data.reason.size() <= 500;
       allow delete: if true;
       allow update: if isTeacher();
+    }
+
+    // ── 학생 명단: 선생님만 ───────────────────────────────────────
+    // 학생 이름은 공개 저장소에 넣지 않고 여기에만 둡니다.
+    match /students/{sid} {
+      allow read, write: if isTeacher();
+    }
+
+    // ── 상담 · 행동특성 누가기록: 선생님만 ────────────────────────
+    // 학생 본인도 읽을 수 없습니다.
+    match /records/{sid} {
+      allow read, write: if isTeacher();
+      match /{document=**} {
+        allow read, write: if isTeacher();
+      }
     }
 
     // 그 밖의 모든 경로는 차단
