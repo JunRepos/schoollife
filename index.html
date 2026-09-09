@@ -681,7 +681,18 @@
       <input type="text" id="r-title" autocomplete="off">
     </div>
     <div class="field">
-      <label for="r-url">링크 주소 — https:// 로 시작해야 합니다</label>
+      <label>파일 올리기 — PDF, 한글, 이미지 모두 됩니다</label>
+      <label class="filepick" id="r-drop">
+        <b id="r-fname">파일 고르기</b>
+        <span id="r-fhint">파일을 올리면 학생이 앱에서 바로 열어 봅니다</span>
+        <input type="file" id="r-file" hidden>
+      </label>
+      <div id="r-fclear" hidden style="margin-top:8px">
+        <button type="button" class="link-btn" id="r-fclear-btn">고른 파일 빼기</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="r-url">또는 링크 주소 — https:// 로 시작해야 합니다</label>
       <input type="url" id="r-url" inputmode="url" autocomplete="off">
     </div>
     <div class="field">
@@ -902,6 +913,7 @@ var FIREBASE_CONFIG = {
   apiKey: "AIzaSyCZAWARkTkW2wn8af2tH6eFPvdOWpufo2U",
   authDomain: "schoollife-ad0f3.firebaseapp.com",
   projectId: "schoollife-ad0f3",
+  storageBucket: "schoollife-ad0f3.firebasestorage.app",   // 자료실 파일 보관
   appId: "1:860681470819:web:5baad950d919a8457c4956"
 };
 </script>
@@ -1080,6 +1092,7 @@ var FIREBASE_CONFIG = {
     return loadScript(base + "firebase-app-compat.js")
       .then(function(){ return loadScript(base + "firebase-auth-compat.js"); })
       .then(function(){ return loadScript(base + "firebase-firestore-compat.js"); })
+      .then(function(){ return loadScript(base + "firebase-storage-compat.js"); })
       .then(function(){
         var cfg = {};
         Object.keys(FIREBASE_CONFIG).forEach(function(k){ if(FIREBASE_CONFIG[k]) cfg[k] = FIREBASE_CONFIG[k]; });
@@ -1087,6 +1100,7 @@ var FIREBASE_CONFIG = {
         firebase.initializeApp(cfg);
         FB.db = firebase.firestore();
         FB.auth = firebase.auth();
+        try { FB.st = firebase.storage(); } catch(e){ FB.st = null; }
         State.cloud = true;
 
         FB.auth.onAuthStateChanged(function(u){
@@ -1115,7 +1129,10 @@ var FIREBASE_CONFIG = {
         FB.db.collection("resources").onSnapshot(function(snap){
           State.resources = snap.docs.map(function(d){
             var v = d.data() || {};
-            return {id:d.id, title:v.title||"", url:v.url||"", desc:v.desc||"", cat:v.cat||"etc", pinned:!!v.pinned, createdAt:v.createdAt||0};
+            return {id:d.id, title:v.title||"", url:v.url||"", desc:v.desc||"",
+                    cat:v.cat||"etc", pinned:!!v.pinned, createdAt:v.createdAt||0,
+                    filePath:v.filePath||"", fileName:v.fileName||"",
+                    fileSize:v.fileSize||0, fileType:v.fileType||""};
           });
           render();
         }, quiet);
@@ -1414,6 +1431,10 @@ var FIREBASE_CONFIG = {
     var meta = el("div", "res-meta");
     if(r.pinned) meta.appendChild(el("span", "flag", "고정"));
     meta.appendChild(el("span", null, (CAT_MAP[r.cat] || CAT_MAP.etc).label));
+    if(r.filePath){
+      meta.appendChild(el("span", "flag grey", fileKindText(r.fileName, r.fileType)));
+      if(r.fileSize) meta.appendChild(el("span", null, fileSizeText(r.fileSize)));
+    }
     var d = new Date(r.createdAt || Date.now());
     meta.appendChild(el("span", null, (d.getMonth()+1) + "/" + d.getDate()));
     body.appendChild(meta);
@@ -1429,7 +1450,7 @@ var FIREBASE_CONFIG = {
     }
     card.appendChild(body);
     if(r.url){
-      var open = el("a", "res-open", "열기");
+      var open = el("a", "res-open", r.filePath ? "보기" : "열기");
       open.href = r.url; open.target = "_blank"; open.rel = "noopener noreferrer";
       card.appendChild(open);
     }
@@ -2713,7 +2734,59 @@ var FIREBASE_CONFIG = {
   });
 
   /* 자료실 */
-  var editingRes = null, resCat = "admission";
+  var editingRes = null, resCat = "admission", resFile = null;
+  var MAX_UPLOAD = 50 * 1024 * 1024;   // 50MB
+
+  function fileSizeText(n){
+    if(!n) return "";
+    if(n < 1024) return n + "B";
+    if(n < 1024 * 1024) return Math.round(n / 1024) + "KB";
+    return (n / 1024 / 1024).toFixed(1) + "MB";
+  }
+  function fileKindText(name, type){
+    var ext = (name || "").split(".").pop().toLowerCase();
+    if(ext === "pdf" || (type || "").indexOf("pdf") >= 0) return "PDF";
+    if(["hwp", "hwpx"].indexOf(ext) >= 0) return "한글";
+    if(["doc", "docx"].indexOf(ext) >= 0) return "워드";
+    if(["xls", "xlsx"].indexOf(ext) >= 0) return "엑셀";
+    if(["ppt", "pptx"].indexOf(ext) >= 0) return "PPT";
+    if(["png", "jpg", "jpeg", "gif", "webp", "heic"].indexOf(ext) >= 0) return "사진";
+    return ext ? ext.toUpperCase() : "파일";
+  }
+  // 파일을 Storage 에 올리고 내려받기 주소를 돌려줍니다.
+  function uploadResFile(id, file, onProgress){
+    if(!FB.st) return Promise.reject({code: "storage/no-bucket"});
+    var safe = file.name.replace(/[^\w.\-가-힣 ]/g, "_");
+    var path = "resources/" + id + "/" + safe;
+    var task = FB.st.ref(path).put(file, {
+      contentType: file.type || "application/octet-stream",
+      contentDisposition: 'inline; filename*=UTF-8\'\'' + encodeURIComponent(file.name)
+    });
+    return new Promise(function(res, rej){
+      task.on("state_changed",
+        function(s){ if(onProgress && s.totalBytes) onProgress(s.bytesTransferred / s.totalBytes); },
+        rej,
+        function(){
+          task.snapshot.ref.getDownloadURL().then(function(url){
+            res({url:url, path:path, name:file.name, size:file.size, type:file.type || ""});
+          }, rej);
+        });
+    });
+  }
+  function deleteResFile(path){
+    if(!path || !FB.st) return Promise.resolve();
+    return FB.st.ref(path)["delete"]()["catch"](function(){});
+  }
+  function uploadErrText(e){
+    var c = (e && e.code) || "";
+    if(c === "storage/no-bucket" || c === "storage/unknown" || c.indexOf("bucket") >= 0)
+      return "파일 보관함이 아직 준비되지 않았습니다.\nFirebase 콘솔에서 요금제를 Blaze 로 올리고 Storage 를 시작해 주세요.";
+    if(c === "storage/unauthorized")
+      return "파일을 올릴 권한이 없습니다.\nStorage 규칙(storage.rules)을 게시하고 TEACHER_EMAIL 을 확인해 주세요.";
+    if(c === "storage/quota-exceeded") return "보관함 용량을 다 썼습니다.";
+    if(c === "storage/retry-limit-exceeded") return "연결이 끊겨 올리지 못했습니다. 다시 시도해 주세요.";
+    return "파일을 올리지 못했습니다." + (c ? " (" + c + ")" : "");
+  }
   function renderResPicks(){
     var box = $("res-picks");
     clear(box);
@@ -2726,42 +2799,105 @@ var FIREBASE_CONFIG = {
       box.appendChild(b);
     });
   }
+  function showResFile(name, size){
+    $("r-fname").textContent = name || "파일 고르기";
+    $("r-fhint").textContent = name
+      ? (fileKindText(name, "") + (size ? " · " + fileSizeText(size) : "") + " · 저장을 누르면 올라갑니다")
+      : "파일을 올리면 학생이 앱에서 바로 열어 봅니다";
+    $("r-fclear").hidden = !name;
+  }
   function openRes(r){
     editingRes = r;
     resCat = r ? r.cat : "admission";
+    resFile = null;
     $("rs-title").textContent = r ? "자료 수정" : "자료 올리기";
     $("r-title").value = r ? r.title : "";
-    $("r-url").value = r ? r.url : "";
+    $("r-url").value = (r && !r.filePath) ? r.url : "";
     $("r-desc").value = r ? r.desc : "";
     $("r-pin").checked = r ? !!r.pinned : false;
     $("r-delete").hidden = !r;
     $("rs-err").hidden = true;
+    $("r-file").value = "";
+    showResFile(r && r.filePath ? r.fileName : "", r ? r.fileSize : 0);
     renderResPicks();
     openSheet("sheet-res");
     if(!r) setTimeout(function(){ $("r-title").focus(); }, 280);
   }
+  $("r-file").addEventListener("change", function(e){
+    var f = e.target.files && e.target.files[0];
+    if(!f) return;
+    if(f.size > MAX_UPLOAD){
+      showErr("rs-err", "파일이 너무 큽니다. " + fileSizeText(MAX_UPLOAD) + " 아래로 줄여 주세요.");
+      this.value = "";
+      return;
+    }
+    $("rs-err").hidden = true;
+    resFile = f;
+    showResFile(f.name, f.size);
+    if(!$("r-title").value.trim()) $("r-title").value = f.name.replace(/\.[^.]+$/, "");
+  });
+  // 방금 고른 파일만 되돌립니다. 이미 올라가 있던 파일은 새 파일을 고르면 바뀝니다.
+  $("r-fclear-btn").addEventListener("click", function(){
+    resFile = null;
+    $("r-file").value = "";
+    var keep = editingRes && editingRes.filePath;
+    showResFile(keep ? editingRes.fileName : "", keep ? editingRes.fileSize : 0);
+  });
+
   $("rs-form").addEventListener("submit", function(e){
     e.preventDefault();
     var title = $("r-title").value.trim(), url = $("r-url").value.trim();
-    var err = $("rs-err");
-    err.hidden = true;
-    if(!title){ toast("자료 이름을 적어 주세요"); return; }
+    $("rs-err").hidden = true;
+    if(!title){ showErr("rs-err", "자료 이름을 적어 주세요."); return; }
     if(url && !/^https?:\/\//i.test(url)){
-      err.textContent = "링크는 http:// 또는 https:// 로 시작해야 합니다.";
-      err.hidden = false;
+      showErr("rs-err", "링크는 http:// 또는 https:// 로 시작해야 합니다.");
+      return;
+    }
+    if(!url && !resFile && !(editingRes && editingRes.filePath)){
+      showErr("rs-err", "파일을 고르거나 링크 주소를 넣어 주세요.");
       return;
     }
     var was = editingRes;
-    put("resources", was ? was.id : uid(), {
-      title:title, url:url, desc:$("r-desc").value.trim(), cat:resCat, pinned:$("r-pin").checked,
-      createdAt: was ? (was.createdAt || Date.now()) : Date.now()
-    }, "resources").then(function(){
+    var id = was ? was.id : uid();
+    var btn = $("rs-form").querySelector(".btn.primary");
+    var label = btn.textContent;
+    btn.disabled = true;
+
+    var step = resFile
+      ? uploadResFile(id, resFile, function(p){ btn.textContent = "올리는 중 " + Math.round(p * 100) + "%"; })
+      : Promise.resolve(was && was.filePath
+          ? {url:was.url, path:was.filePath, name:was.fileName, size:was.fileSize, type:was.fileType}
+          : null);
+
+    step.then(function(up){
+      // 파일을 새로 올렸으면 예전 파일은 지웁니다.
+      if(up && resFile && was && was.filePath && was.filePath !== up.path) deleteResFile(was.filePath);
+      btn.textContent = "저장 중…";
+      return put("resources", id, {
+        title:title,
+        url: up ? up.url : url,
+        desc:$("r-desc").value.trim(), cat:resCat, pinned:$("r-pin").checked,
+        filePath: up ? up.path : "",
+        fileName: up ? up.name : "",
+        fileSize: up ? up.size : 0,
+        fileType: up ? up.type : "",
+        createdAt: was ? (was.createdAt || Date.now()) : Date.now()
+      }, "resources");
+    }).then(function(){
       closeSheets(); toast(was ? "고쳤습니다" : "올렸습니다");
-    })["catch"](function(err){ showErr("rs-err", saveErrText(err)); });
+    })["catch"](function(ex){
+      showErr("rs-err", (ex && String(ex.code || "").indexOf("storage/") === 0) ? uploadErrText(ex) : saveErrText(ex));
+    })["then"](function(){
+      btn.disabled = false;
+      btn.textContent = label;
+    });
   });
   $("r-delete").addEventListener("click", function(){
     if(!editingRes || !window.confirm("이 자료를 지울까요?")) return;
-    drop("resources", editingRes.id, "resources").then(function(){ closeSheets(); toast("지웠습니다"); });
+    var path = editingRes.filePath;
+    drop("resources", editingRes.id, "resources").then(function(){
+      return deleteResFile(path);
+    }).then(function(){ closeSheets(); toast("지웠습니다"); });
   });
 
   /* 일정 */

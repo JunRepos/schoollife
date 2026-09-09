@@ -1,0 +1,25 @@
+rules_version = '2';
+
+// Firebase 콘솔 > Storage > Rules 에 그대로 붙여넣고 [게시] 하세요.
+// TEACHER_EMAIL 자리에 선생님 계정 이메일을 넣어야 합니다.
+// (Firestore 규칙과 파일이 다릅니다. 둘 다 게시해야 합니다.)
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // 자료실 파일 — 학생은 열어 보기만, 올리고 지우는 것은 선생님만
+    match /resources/{docId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.auth.token.email in ['TEACHER_EMAIL']
+                   && request.resource.size < 50 * 1024 * 1024;
+      allow delete: if request.auth != null
+                    && request.auth.token.email in ['TEACHER_EMAIL'];
+    }
+
+    // 그 밖의 모든 경로는 차단
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
