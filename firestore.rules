@@ -68,6 +68,17 @@ service cloud.firestore {
       }
     }
 
+    // ── 교과 성적: 선생님만 ───────────────────────────────────────
+    // 원점수 · 성취도 · 석차등급이 들어 있습니다. 학생 본인도 읽을 수 없습니다.
+    match /grades/{sid} {
+      allow read, write: if isTeacher();
+    }
+
+    // ── 대학별 환산표: 선생님만 ───────────────────────────────────
+    match /unis/{id} {
+      allow read, write: if isTeacher();
+    }
+
     // 그 밖의 모든 경로는 차단
     match /{document=**} {
       allow read, write: if false;

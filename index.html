@@ -233,6 +233,68 @@
   .entry-text{font-size:13.5px; line-height:1.6; white-space:pre-wrap; word-break:break-word}
   .back-btn{border:1px solid var(--rule); background:var(--surface); border-radius:9px; padding:6px 12px; font-size:12.5px; font-weight:600; cursor:pointer; margin-bottom:14px}
 
+  /* 성적 */
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(112px,1fr)); gap:9px; margin-bottom:16px}
+  .tile{background:var(--surface); border:1px solid var(--rule); border-radius:12px; padding:11px 13px 12px}
+  .tile .k{font-size:11px; color:var(--muted); font-weight:600; margin-bottom:3px}
+  .tile .v{font-family:var(--serif); font-size:24px; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.1}
+  .tile .s{font-size:11px; color:var(--muted); margin-top:2px; font-variant-numeric:tabular-nums}
+  .tile.hi{border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink)}
+
+  .gtbl-wrap{overflow-x:auto; margin:0 -20px; padding:0 20px}
+  body.wide .gtbl-wrap{margin:0; padding:0}
+  .gtbl{width:100%; min-width:520px; border-collapse:collapse; font-size:12.5px}
+  .gtbl th{
+    text-align:left; font-size:10.5px; font-weight:600; color:var(--muted); padding:6px 8px;
+    border-bottom:1px solid var(--rule); white-space:nowrap; letter-spacing:.02em;
+  }
+  .gtbl td{padding:7px 8px; border-bottom:1px solid var(--rule-2); vertical-align:top}
+  .gtbl tr:last-child td{border-bottom:0}
+  .gtbl .n{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
+  .gtbl .sub{font-weight:600}
+  .gtbl .area{color:var(--muted); font-size:11px}
+  .gtbl .rk{font-family:var(--serif); font-weight:600; font-variant-numeric:tabular-nums}
+  .gtbl tbody.term-head td{
+    background:var(--surface-2); font-weight:600; font-size:11.5px; color:var(--ink-2);
+    padding:6px 8px; border-bottom:1px solid var(--rule);
+  }
+  .achbadge{
+    display:inline-block; min-width:19px; text-align:center; font-size:11px; font-weight:700;
+    border-radius:5px; padding:1px 5px; background:var(--surface-2); color:var(--ink-2);
+  }
+  .achbadge.A{background:rgba(23,136,107,.16); color:var(--ok)}
+  .achbadge.B{background:rgba(55,102,206,.16); color:var(--t-task)}
+  .achbadge.D, .achbadge.E{background:rgba(196,51,80,.14); color:var(--t-exam)}
+
+  .barrow{display:flex; align-items:center; gap:9px; padding:5px 0}
+  .barrow .lb{width:78px; flex:0 0 auto; font-size:12px; color:var(--ink-2)}
+  .barrow .bar{flex:1; height:7px; background:var(--surface-2); border-radius:99px; overflow:hidden}
+  .barrow .bar i{display:block; height:100%; background:var(--tc); border-radius:99px}
+  .barrow .vv{width:52px; text-align:right; font-size:12px; font-variant-numeric:tabular-nums; font-weight:600}
+
+  .unicard{background:var(--surface); border:1px solid var(--rule); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:7px}
+  .unicard .top{display:flex; align-items:baseline; gap:9px}
+  .unicard .nm{font-size:14.5px; font-weight:600; flex:1}
+  .unicard .sc{font-family:var(--serif); font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; letter-spacing:-.02em}
+  .unicard .meta{font-size:11.5px; color:var(--muted); line-height:1.5}
+  .unicard .scale{display:flex; gap:5px; flex-wrap:wrap}
+  .unicard .scale span{font-size:11px; color:var(--ink-2); background:var(--surface-2); border-radius:5px; padding:2px 6px; font-variant-numeric:tabular-nums}
+  .srcnote{font-size:11.5px; color:var(--muted); line-height:1.6; margin-top:2px}
+  .srcnote a{color:var(--t-task)}
+
+  .filepick{
+    border:1.5px dashed var(--rule); border-radius:12px; padding:22px 16px; text-align:center;
+    background:var(--surface); cursor:pointer; display:block;
+  }
+  .filepick b{display:block; font-size:14px; margin-bottom:4px}
+  .filepick span{font-size:12px; color:var(--muted); line-height:1.5}
+  .prev-line{display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:5px 0; border-bottom:1px solid var(--rule-2)}
+  .prev-line b{font-weight:600}
+  .warnbox{
+    background:rgba(217,85,43,.12); border:1px solid rgba(217,85,43,.3); border-radius:9px;
+    padding:9px 11px; font-size:12px; color:var(--ink-2); line-height:1.55; margin-bottom:10px;
+  }
+
   /* 공통 */
   .empty{text-align:center; padding:22px 16px; color:var(--muted); font-size:13px}
   .empty .pen{font-family:var(--pen); font-size:22px; color:var(--ink-2); display:block; margin-bottom:1px}
@@ -522,7 +584,7 @@
       </section>
     </div>
 
-    <!-- 학생 기록 (선생님 전용) -->
+    <!-- 학생 (선생님 전용) -->
     <div id="view-rec" hidden>
       <section style="border-top:0">
         <div class="rec-layout">
@@ -745,6 +807,73 @@
   </form>
 </div>
 
+<!-- 성적 불러오기 -->
+<div class="sheet" id="sheet-import" role="dialog" aria-modal="true" aria-labelledby="im-title">
+  <div class="grabber"></div>
+  <h2 id="im-title">성적 불러오기</h2>
+  <p class="lead">나이스에서 내려받은 <b>교과학습발달상황</b> 엑셀 파일을 고르세요. 파일은 이 브라우저 안에서만 읽고, 결과만 선생님 계정으로 저장합니다.</p>
+  <div class="warnbox">학생 성적은 선생님 계정으로만 읽을 수 있는 곳에 저장됩니다. 공개 저장소에는 올라가지 않습니다.</div>
+  <label class="filepick" id="im-drop">
+    <b>엑셀 파일 고르기</b>
+    <span>.xlsx 파일 · 반 전체가 한 파일에 들어 있어도 됩니다</span>
+    <input type="file" id="im-file" accept=".xlsx" hidden>
+  </label>
+  <div id="im-preview" hidden></div>
+  <p class="form-err" id="im-err" hidden></p>
+  <div class="sheet-actions">
+    <button type="button" class="btn" data-close>닫기</button>
+    <button type="button" class="btn primary" id="im-save" hidden>저장</button>
+  </div>
+</div>
+
+<!-- 대학 환산표 -->
+<div class="sheet" id="sheet-uni" role="dialog" aria-modal="true" aria-labelledby="un-title">
+  <div class="grabber"></div>
+  <h2 id="un-title">대학 환산표</h2>
+  <p class="lead">2028학년도 대입전형시행계획에 적힌 등급별 환산점수를 넣어 두면, 21명 점수가 자동으로 계산됩니다.</p>
+  <form id="un-form">
+    <div class="field">
+      <label for="u-name">대학 · 전형 이름</label>
+      <input type="text" id="u-name" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>등급별 환산점수 (1등급 → 5등급)</label>
+      <div class="picks" style="grid-auto-flow:column">
+        <input type="number" id="u-s1" step="0.01" inputmode="decimal" aria-label="1등급 점수">
+        <input type="number" id="u-s2" step="0.01" inputmode="decimal" aria-label="2등급 점수">
+        <input type="number" id="u-s3" step="0.01" inputmode="decimal" aria-label="3등급 점수">
+        <input type="number" id="u-s4" step="0.01" inputmode="decimal" aria-label="4등급 점수">
+        <input type="number" id="u-s5" step="0.01" inputmode="decimal" aria-label="5등급 점수">
+      </div>
+    </div>
+    <div class="field">
+      <label>반영 교과 — 아무것도 안 고르면 등급이 나오는 전 과목</label>
+      <div class="picks" id="u-areas" style="grid-auto-flow:row; grid-template-columns:repeat(3,1fr)"></div>
+    </div>
+    <label class="check-row"><input type="checkbox" id="u-useach"> 등급 없는 과목은 성취도로 반영</label>
+    <div class="field" id="u-achwrap" hidden>
+      <label>성취도별 환산점수 (A → E)</label>
+      <div class="picks" style="grid-auto-flow:column">
+        <input type="number" id="u-a1" step="0.01" inputmode="decimal" aria-label="A 점수">
+        <input type="number" id="u-a2" step="0.01" inputmode="decimal" aria-label="B 점수">
+        <input type="number" id="u-a3" step="0.01" inputmode="decimal" aria-label="C 점수">
+        <input type="number" id="u-a4" step="0.01" inputmode="decimal" aria-label="D 점수">
+        <input type="number" id="u-a5" step="0.01" inputmode="decimal" aria-label="E 점수">
+      </div>
+    </div>
+    <div class="field">
+      <label for="u-note">메모 · 출처</label>
+      <textarea id="u-note" rows="2"></textarea>
+    </div>
+    <p class="form-err" id="un-err" hidden></p>
+    <div class="sheet-actions">
+      <button type="button" class="btn danger" id="u-delete" hidden>삭제</button>
+      <button type="button" class="btn" data-close>취소</button>
+      <button type="submit" class="btn primary">저장</button>
+    </div>
+  </form>
+</div>
+
 <!-- 명단 등록 -->
 <div class="sheet" id="sheet-roster" role="dialog" aria-modal="true" aria-labelledby="ro-title">
   <div class="grabber"></div>
@@ -905,7 +1034,8 @@ var FIREBASE_CONFIG = {
   var State = {
     cloud:false, teacher:false, user:null, sid:lsGet("a26.sid") || "",
     notices:[], events:[], bookings:[], details:{}, resources:[],
-    roster:{}, entries:[], entriesFor:"", recSel:""
+    roster:{}, entries:[], entriesFor:"", recSel:"",
+    grades:{}, unis:[], recMode:"rec"
   };
 
   /* ---------------- 데모(로컬) ---------------- */
@@ -917,6 +1047,8 @@ var FIREBASE_CONFIG = {
       State.details = lsGet("a26.details") || {};
       State.resources = lsGet("a26.resources") || [];
       State.roster = lsGet("a26.roster") || {};
+      State.grades = lsGet("a26.grades") || {};
+      State.unis = lsGet("a26.unis") || [];
       State.teacher = !!lsGet("a26.teacherMode");
     },
     save:function(){
@@ -926,6 +1058,8 @@ var FIREBASE_CONFIG = {
       lsSet("a26.details", State.details);
       lsSet("a26.resources", State.resources);
       lsSet("a26.roster", State.roster);
+      lsSet("a26.grades", State.grades);
+      lsSet("a26.unis", State.unis);
     }
   };
 
@@ -963,6 +1097,7 @@ var FIREBASE_CONFIG = {
             if(unsubRoster){ unsubRoster(); unsubRoster = null; }
             if(unsubEntries){ unsubEntries(); unsubEntries = null; }
             State.roster = {}; State.details = {}; State.entries = []; State.entriesFor = "";
+            State.grades = {}; State.unis = [];
             if(activeTab === "rec") switchTab("home");
           }
           applyWide();
@@ -1011,6 +1146,23 @@ var FIREBASE_CONFIG = {
       var m = {};
       snap.docs.forEach(function(d){ m[d.id] = (d.data() || {}).name || ""; });
       State.roster = m;
+      render();
+    }, quiet);
+    FB.db.collection("grades").onSnapshot(function(snap){
+      var m = {};
+      snap.docs.forEach(function(d){
+        var v = d.data() || {};
+        m[d.id] = {name: v.name || "", rows: v.rows || [], updatedAt: v.updatedAt || 0};
+      });
+      State.grades = m;
+      render();
+    }, quiet);
+    FB.db.collection("unis").onSnapshot(function(snap){
+      State.unis = snap.docs.map(function(d){
+        var v = d.data() || {};
+        return {id:d.id, name:v.name || "", scale:v.scale || {}, areas:v.areas || [],
+                useAch:!!v.useAch, achScale:v.achScale || {}, note:v.note || ""};
+      }).sort(function(a,b){ return a.name < b.name ? -1 : 1; });
       render();
     }, quiet);
     FB.db.collection("bookingDetails").onSnapshot(function(snap){
@@ -1717,11 +1869,20 @@ var FIREBASE_CONFIG = {
     var haveRoster = Object.keys(names).length > 0;
 
     var head = el("div", "sec-head");
-    head.appendChild(el("h2", null, "학생 기록"));
-    var rb = el("button", "link-btn", haveRoster ? "명단 수정" : "명단 등록");
+    head.appendChild(el("h2", null, "학생"));
+    var tools = el("div", "tools");
+    tools.style.margin = "0";
+    var rb = el("button", null, haveRoster ? "명단 수정" : "명단 등록");
     rb.type = "button";
+    rb.style.color = "var(--t-task)";
     rb.addEventListener("click", openRoster);
-    head.appendChild(rb);
+    tools.appendChild(rb);
+    var ib = el("button", null, "성적 불러오기");
+    ib.type = "button";
+    ib.style.color = "var(--t-task)";
+    ib.addEventListener("click", openImport);
+    tools.appendChild(ib);
+    head.appendChild(tools);
     listBox.appendChild(head);
 
     if(!haveRoster){
@@ -1735,6 +1896,8 @@ var FIREBASE_CONFIG = {
       b.setAttribute("aria-current", State.recSel === sid ? "true" : "false");
       b.appendChild(el("div", "rno", sid.slice(3)));
       b.appendChild(el("div", "rname", names[sid] || sid));
+      var gr = wAvgRank(gradeRows(sid));
+      if(gr != null) b.appendChild(el("div", "rcount", gr.toFixed(2)));
       var cnt = entryCount(sid);
       if(cnt !== null) b.appendChild(el("div", "rcount" + (cnt ? "" : " zero"), cnt + "건"));
       b.addEventListener("click", function(){
@@ -1765,11 +1928,26 @@ var FIREBASE_CONFIG = {
 
     var dhead = el("div", "sec-head");
     dhead.appendChild(el("h2", null, (names[State.recSel] || "") + " " + State.recSel));
-    var ab = el("button", "link-btn", "＋ 기록 남기기");
-    ab.type = "button";
-    ab.addEventListener("click", function(){ openEntry(null); });
-    dhead.appendChild(ab);
+    if(State.recMode === "rec"){
+      var ab = el("button", "link-btn", "＋ 기록 남기기");
+      ab.type = "button";
+      ab.addEventListener("click", function(){ openEntry(null); });
+      dhead.appendChild(ab);
+    }
     detail.appendChild(dhead);
+
+    var seg = el("div", "seg");
+    [["rec","누가기록"],["score","성적"],["uni","대학 환산"]].forEach(function(p){
+      var b = el("button", null, p[1]);
+      b.type = "button";
+      b.setAttribute("aria-pressed", State.recMode === p[0] ? "true" : "false");
+      b.addEventListener("click", function(){ State.recMode = p[0]; render(); });
+      seg.appendChild(b);
+    });
+    detail.appendChild(seg);
+
+    if(State.recMode === "score"){ renderScore(detail, State.recSel); return; }
+    if(State.recMode === "uni"){ renderUni(detail, State.recSel); return; }
 
     var rows = State.entries.slice().sort(function(a,b){
       if(a.date !== b.date) return a.date < b.date ? 1 : -1;
@@ -1801,6 +1979,188 @@ var FIREBASE_CONFIG = {
       wrap.appendChild(card);
     });
     detail.appendChild(wrap);
+  }
+
+  /* ---------------- 성적 화면 ---------------- */
+  function tile(k, v, s, hi){
+    var t = el("div", "tile" + (hi ? " hi" : ""));
+    t.appendChild(el("div", "k", k));
+    t.appendChild(el("div", "v", v));
+    if(s) t.appendChild(el("div", "s", s));
+    return t;
+  }
+  function fmt(n, d){ return n == null ? "—" : n.toFixed(d == null ? 2 : d); }
+
+  function renderScore(box, sid){
+    var rows = gradeRows(sid);
+    if(!rows.length){
+      box.appendChild(emptyBox("아직 성적이 없어요", "위 ‘성적 불러오기’로 나이스 엑셀 파일을 넣어 주세요"));
+      return;
+    }
+    var ranked = rows.filter(function(r){ return r.rank; });
+    var avg5 = wAvgRank(rows);
+    var main = rows.filter(function(r){ return MAIN_AREAS.indexOf(r.area) >= 0; });
+    var g9 = to9(avg5);
+
+    var tiles = el("div", "tiles");
+    tiles.appendChild(tile("평균 등급", fmt(avg5), "학점 가중 · 5등급제", true));
+    tiles.appendChild(tile("주요교과", fmt(wAvgRank(main)), "국·수·영·사·과"));
+    tiles.appendChild(tile("9등급 환산", fmt(g9), avg5 == null ? "등급 과목 없음" : "추정 상위 " + fmt(pctFrom5(avg5), 1) + "%"));
+    tiles.appendChild(tile("원점수 평균", fmt(avgScore(rows), 1), ranked.length + "개 과목"));
+    tiles.appendChild(tile("이수 학점", String(sumCredit(rows)), "등급 과목 " + sumCredit(ranked) + "학점"));
+    box.appendChild(tiles);
+
+    // 교과별 평균
+    var areaSec = el("section");
+    areaSec.style.borderTop = "0";
+    areaSec.style.paddingTop = "4px";
+    var ah = el("div", "sec-head");
+    ah.appendChild(el("h2", null, "교과별 평균 등급"));
+    areaSec.appendChild(ah);
+    ALL_AREAS.forEach(function(a){
+      var rs = rows.filter(function(r){ return r.area === a && r.rank; });
+      if(!rs.length) return;
+      var v = wAvgRank(rs);
+      var row = el("div", "barrow");
+      row.style.setProperty("--tc", MAIN_AREAS.indexOf(a) >= 0 ? "var(--t-task)" : "var(--muted)");
+      row.appendChild(el("div", "lb", a.replace("(역사/도덕포함)", "").replace("기술·가정/정보", "기가·정보").replace("제2외국어/한문", "제2외/한문")));
+      var bar = el("div", "bar");
+      var fill = el("i");
+      fill.style.width = Math.max(3, (5 - v) / 4 * 100) + "%";
+      bar.appendChild(fill);
+      row.appendChild(bar);
+      row.appendChild(el("div", "vv", v.toFixed(2)));
+      areaSec.appendChild(row);
+    });
+    box.appendChild(areaSec);
+
+    // 학기별 표
+    termsOf(rows).forEach(function(k){
+      var rs = rows.filter(function(r){ return termKey(r) === k; });
+      var sec = el("section");
+      var h = el("div", "sec-head");
+      h.appendChild(el("h2", null, termLabel(k)));
+      var ta = wAvgRank(rs);
+      h.appendChild(el("span", "sec-note", (ta != null ? "평균 " + ta.toFixed(2) + "등급 · " : "") + sumCredit(rs) + "학점"));
+      sec.appendChild(h);
+
+      var wrap = el("div", "gtbl-wrap");
+      var tbl = el("table", "gtbl");
+      var thead = el("thead");
+      var hr = el("tr");
+      ["과목", "학점", "원점수/평균", "성취도", "등급", "수강자"].forEach(function(t, i){
+        var th = el("th", i >= 1 ? "n" : null, t);
+        if(i === 0) th.className = "";
+        hr.appendChild(th);
+      });
+      thead.appendChild(hr);
+      tbl.appendChild(thead);
+      var tb = el("tbody");
+      rs.forEach(function(r){
+        var tr = el("tr");
+        var td0 = el("td");
+        td0.appendChild(el("div", "sub", r.subject));
+        td0.appendChild(el("div", "area", r.area + (r.note ? " · " + r.note : "")));
+        tr.appendChild(td0);
+        tr.appendChild(el("td", "n", r.credit == null ? "—" : String(r.credit)));
+        tr.appendChild(el("td", "n", r.score == null ? "—" : (r.score + " / " + r.avg)));
+        var td3 = el("td", "n");
+        if(r.ach) td3.appendChild(el("span", "achbadge " + r.ach, r.ach));
+        else td3.appendChild(document.createTextNode("—"));
+        tr.appendChild(td3);
+        tr.appendChild(el("td", "n rk", r.rank ? String(r.rank) : "—"));
+        tr.appendChild(el("td", "n", r.count ? String(r.count) : "—"));
+        tb.appendChild(tr);
+      });
+      tbl.appendChild(tb);
+      wrap.appendChild(tbl);
+      sec.appendChild(wrap);
+      box.appendChild(sec);
+    });
+
+    var note = el("p", "srcnote");
+    note.textContent = "9등급 환산은 공식 대응표가 없습니다. 5등급 각 구간의 한가운데를 누적 상위 %로 잡고 9등급 척도에 옮긴 추정치라, 기관마다 발표하는 값과 0.3등급 안팎으로 다를 수 있습니다. 실제 지원 판단에는 참고로만 쓰세요.";
+    box.appendChild(note);
+  }
+
+  /* ---------------- 대학 환산 ---------------- */
+  function renderUni(box, sid){
+    var rows = gradeRows(sid);
+    if(!rows.length){
+      box.appendChild(emptyBox("성적을 먼저 불러와 주세요", ""));
+      return;
+    }
+    var h = el("div", "sec-head");
+    h.appendChild(el("h2", null, "대학별 환산 점수"));
+    var ab = el("button", "link-btn", "＋ 대학 추가");
+    ab.type = "button";
+    ab.addEventListener("click", function(){ openUni(null); });
+    h.appendChild(ab);
+    box.appendChild(h);
+
+    if(!State.unis.length){
+      box.appendChild(emptyBox("등록된 대학이 없어요", "2028 대입전형시행계획의 등급별 환산점수를 넣으면 21명 점수가 한 번에 계산됩니다"));
+      var help = el("p", "srcnote");
+      help.textContent = "대학마다 환산 방식이 달라 미리 넣어 두지 않았습니다. 잘못된 표로 학생 상담을 하면 위험해서, 시행계획에서 직접 확인한 값만 넣도록 했습니다. 예: 1등급 100 / 2등급 98 / 3등급 97.5 / 4등급 95 / 5등급 90 처럼 다섯 칸을 채우면 됩니다.";
+      box.appendChild(help);
+      return;
+    }
+
+    var list = el("div", "notices");
+    State.unis.forEach(function(u){
+      var res = uniScore(rows, u);
+      var card = el("div", "unicard");
+      var top = el("div", "top");
+      top.appendChild(el("div", "nm", u.name));
+      top.appendChild(el("div", "sc", res.score == null ? "—" : res.score.toFixed(2)));
+      card.appendChild(top);
+
+      var sc = el("div", "scale");
+      [1,2,3,4,5].forEach(function(i){
+        if(u.scale[i] != null) sc.appendChild(el("span", null, i + "등급 " + u.scale[i]));
+      });
+      card.appendChild(sc);
+
+      var meta = el("div", "meta");
+      meta.textContent = "반영 " + (u.areas.length ? u.areas.length + "개 교과" : "등급 나오는 전 과목")
+        + " · " + res.subjects + "과목 " + res.credit + "학점"
+        + (u.useAch ? " · 성취도 반영" : (res.skipped ? " · 등급 없는 " + res.skipped + "과목 제외" : ""));
+      card.appendChild(meta);
+      if(u.note) card.appendChild(el("div", "meta", u.note));
+
+      var tools = el("div", "tools");
+      tools.appendChild(toolBtn("수정", function(){ openUni(u); }));
+      tools.appendChild(toolBtn("반 전체 보기", function(){ showUniAll(u); }));
+      card.appendChild(tools);
+      list.appendChild(card);
+    });
+    box.appendChild(list);
+  }
+
+  function showUniAll(u){
+    var lines = SIDS.map(function(sid){
+      var r = uniScore(gradeRows(sid), u);
+      return {sid: sid, name: State.roster[sid] || sid, score: r.score};
+    }).filter(function(x){ return x.score != null; })
+      .sort(function(a, b){ return b.score - a.score; });
+    if(!lines.length){ toast("계산할 성적이 없습니다"); return; }
+    var box = $("rec-detail");
+    var sec = el("section");
+    var h = el("div", "sec-head");
+    h.appendChild(el("h2", null, u.name + " · 반 전체"));
+    var cb = el("button", "link-btn", "닫기");
+    cb.type = "button";
+    cb.addEventListener("click", render);
+    h.appendChild(cb);
+    sec.appendChild(h);
+    lines.forEach(function(x, i){
+      var row = el("div", "prev-line");
+      row.appendChild(el("span", null, (i+1) + ". " + x.name + " " + x.sid));
+      row.appendChild(el("b", null, x.score.toFixed(2)));
+      sec.appendChild(row);
+    });
+    box.appendChild(sec);
+    sec.scrollIntoView({block:"nearest"});
   }
 
   /* ---------------- 탭 ---------------- */
@@ -1882,6 +2242,120 @@ var FIREBASE_CONFIG = {
   }
   function applyWide(){
     document.body.classList.toggle("wide", State.teacher && window.innerWidth >= 1024);
+  }
+
+  /* ================= 성적 =================
+     2022 개정 교육과정 5등급제 기준입니다.
+     5등급 누적 비율: 1등급 10% / 2등급 34% / 3등급 66% / 4등급 90% / 5등급 100% */
+  var G5_MID = [5, 22, 50, 78, 95];                            // 각 등급 구간의 한가운데
+  var G9_MID = [2, 7.5, 17, 31.5, 50, 68.5, 83, 92.5, 98];     // 9등급 각 구간의 한가운데
+  var MAIN_AREAS = ["국어", "수학", "영어", "사회(역사/도덕포함)", "과학"];
+  var ALL_AREAS = ["국어","수학","영어","사회(역사/도덕포함)","과학","기술·가정/정보","제2외국어/한문","체육","예술","교양"];
+  var ACH_ORDER = ["A","B","C","D","E"];
+
+  function interp(x, xs, ys){
+    if(x <= xs[0]) return ys[0];
+    if(x >= xs[xs.length-1]) return ys[ys.length-1];
+    for(var i = 1; i < xs.length; i++){
+      if(x <= xs[i]){
+        var t = (x - xs[i-1]) / (xs[i] - xs[i-1]);
+        return ys[i-1] + t * (ys[i] - ys[i-1]);
+      }
+    }
+    return ys[ys.length-1];
+  }
+  // 5등급 평균 → 추정 누적 상위 % → 9등급 환산. 공식 표가 없어 추정치입니다.
+  function pctFrom5(avg5){ return interp(avg5, [1,2,3,4,5], G5_MID); }
+  function to9(avg5){
+    if(avg5 == null) return null;
+    return interp(pctFrom5(avg5), G9_MID, [1,2,3,4,5,6,7,8,9]);
+  }
+
+  function sidOfNo(no){ return "206" + (no < 10 ? "0" + no : "" + no); }
+  function gradeRows(sid){
+    var g = State.grades[sid];
+    return (g && g.rows) ? g.rows : [];
+  }
+  // 학점 가중 평균 등급
+  function wAvgRank(rows){
+    var s = 0, c = 0;
+    rows.forEach(function(r){
+      if(r.rank && r.credit){ s += r.rank * r.credit; c += r.credit; }
+    });
+    return c ? s / c : null;
+  }
+  function avgScore(rows){
+    var v = rows.filter(function(r){ return typeof r.score === "number"; });
+    if(!v.length) return null;
+    return v.reduce(function(a, r){ return a + r.score; }, 0) / v.length;
+  }
+  function sumCredit(rows){
+    return rows.reduce(function(a, r){ return a + (r.credit || 0); }, 0);
+  }
+  function inAreas(r, areas){ return !areas || !areas.length || areas.indexOf(r.area) >= 0; }
+
+  function termKey(r){ return r.g + "-" + r.t; }
+  function termLabel(k){ var p = k.split("-"); return p[0] + "학년 " + p[1] + "학기"; }
+  function termsOf(rows){
+    var seen = {}, out = [];
+    rows.forEach(function(r){ var k = termKey(r); if(!seen[k]){ seen[k] = 1; out.push(k); } });
+    return out.sort();
+  }
+
+  /* 대학 환산 점수: Σ(배점 × 학점) / Σ학점 */
+  function uniScore(rows, uni){
+    var s = 0, c = 0, used = 0, skipped = 0;
+    rows.forEach(function(r){
+      if(!inAreas(r, uni.areas)) return;
+      var cr = r.credit || 0;
+      if(!cr) return;
+      var pt = null;
+      if(r.rank && uni.scale && uni.scale[r.rank] != null) pt = uni.scale[r.rank];
+      else if(!r.rank && uni.useAch && r.ach && uni.achScale && uni.achScale[r.ach] != null) pt = uni.achScale[r.ach];
+      if(pt == null){ if(!r.rank) skipped++; return; }
+      s += pt * cr; c += cr; used++;
+    });
+    return {score: c ? s / c : null, credit: c, subjects: used, skipped: skipped};
+  }
+
+  /* 나이스 엑셀 파싱 — 브라우저 안에서만 돌아갑니다 */
+  function loadSheetJS(){
+    if(window.XLSX) return Promise.resolve();
+    return loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
+  }
+  function parseNeis(wb){
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    var aoa = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:null});
+    var out = [], no = null, name = null, g = null, t = null;
+    var VALID_ACH = {A:1, B:1, C:1, D:1, E:1, P:1};
+    function n(v){ var x = parseFloat(v); return isFinite(x) ? x : null; }
+    aoa.forEach(function(row){
+      if(!row) return;
+      var c = function(i){ var v = row[i]; return (v == null) ? "" : String(v).trim(); };
+      var a = c(0);
+      if(a.indexOf("번") >= 0 && c(1).indexOf("성") >= 0) return;   // 표 머리글
+      if(a.indexOf("이수학점") >= 0) return;
+      if(n(a) != null && c(1)){ no = Math.round(n(a)); name = c(1); }
+      if(n(c(2)) != null) g = Math.round(n(c(2)));
+      if(n(c(3)) != null) t = Math.round(n(c(3)));
+      var subject = c(5);
+      if(!subject || !name) return;
+      var raw = c(7), score = null, avg = null;
+      var m = raw.match(/^\s*([\d.]+)\s*\/\s*([\d.]+)/);
+      if(m){ score = parseFloat(m[1]); avg = parseFloat(m[2]); }
+      // 전입학 같은 비고가 성취도 칸으로 밀려 들어오는 경우가 있어 걸러 냅니다.
+      var ach = c(8);
+      var note = c(12);
+      if(ach && !VALID_ACH[ach]){ if(!note) note = ach; ach = ""; }
+      out.push({
+        no: no, name: name, g: g, t: t, area: c(4), subject: subject,
+        credit: n(c(6)), score: score, avg: avg, ach: ach,
+        rank: n(c(10)) ? Math.round(n(c(10))) : null,
+        count: n(c(11)) ? Math.round(n(c(11))) : null,
+        note: note
+      });
+    });
+    return out;
   }
 
   /* ---------------- 날짜 고르기 ----------------
@@ -2042,7 +2516,7 @@ var FIREBASE_CONFIG = {
   function closeSheets(){
     closeDatePop();
     $("scrim").classList.remove("open");
-    ["sheet-login","sheet-notice","sheet-res","sheet-event","sheet-book","sheet-move","sheet-entry","sheet-roster"]
+    ["sheet-login","sheet-notice","sheet-res","sheet-event","sheet-book","sheet-move","sheet-entry","sheet-roster","sheet-import","sheet-uni"]
       .forEach(function(id){ $(id).classList.remove("open"); });
   }
   $("scrim").addEventListener("click", closeSheets);
@@ -2398,6 +2872,201 @@ var FIREBASE_CONFIG = {
   $("e-delete").addEventListener("click", function(){
     if(!editingEntry || !window.confirm("이 기록을 지울까요?")) return;
     dropEntry(State.recSel, editingEntry.id).then(function(){ closeSheets(); toast("지웠습니다"); });
+  });
+
+  /* 성적 불러오기 */
+  var importReady = null;
+  function openImport(){
+    importReady = null;
+    $("im-preview").hidden = true;
+    clear($("im-preview"));
+    $("im-err").hidden = true;
+    $("im-save").hidden = true;
+    $("im-file").value = "";
+    openSheet("sheet-import");
+  }
+  $("im-file").addEventListener("change", function(e){
+    var f = e.target.files && e.target.files[0];
+    if(!f) return;
+    var err = $("im-err");
+    err.hidden = true;
+    var prev = $("im-preview");
+    clear(prev);
+    prev.hidden = false;
+    prev.appendChild(el("div", "prev-line", "파일을 읽는 중…"));
+
+    loadSheetJS().then(function(){
+      return f.arrayBuffer();
+    }).then(function(buf){
+      var wb = XLSX.read(new Uint8Array(buf), {type:"array"});
+      var parsed = parseNeis(wb);
+      if(!parsed.length) throw new Error("empty");
+
+      var byNo = {};
+      parsed.forEach(function(r){
+        if(!r.no) return;
+        (byNo[r.no] = byNo[r.no] || []).push(r);
+      });
+      var pack = [], mismatch = [], unknown = [];
+      Object.keys(byNo).sort(function(a,b){ return a - b; }).forEach(function(no){
+        var sid = sidOfNo(+no);
+        var nm = byNo[no][0].name;
+        if(!STUDENT_TT[sid]){ unknown.push(no + "번 " + nm); return; }
+        if(State.roster[sid] && State.roster[sid] !== nm) mismatch.push(sid + " 명단 " + State.roster[sid] + " ↔ 파일 " + nm);
+        pack.push({sid: sid, name: nm, rows: byNo[no]});
+      });
+      if(!pack.length) throw new Error("nomatch");
+
+      importReady = pack;
+      clear(prev);
+      var subjects = pack.reduce(function(a, p){ return a + p.rows.length; }, 0);
+      var terms = {};
+      parsed.forEach(function(r){ terms[r.g + "-" + r.t] = 1; });
+      [["학생", pack.length + "명"],
+       ["과목 기록", subjects + "건"],
+       ["학기", Object.keys(terms).sort().join(", ")]].forEach(function(p){
+        var l = el("div", "prev-line");
+        l.appendChild(el("span", null, p[0]));
+        l.appendChild(el("b", null, p[1]));
+        prev.appendChild(l);
+      });
+      pack.slice(0, 3).forEach(function(p){
+        var a = wAvgRank(p.rows);
+        var l = el("div", "prev-line");
+        l.appendChild(el("span", null, p.sid + " " + p.name));
+        l.appendChild(el("b", null, a == null ? "—" : "평균 " + a.toFixed(2) + "등급"));
+        prev.appendChild(l);
+      });
+      if(pack.length > 3) prev.appendChild(el("div", "prev-line", "그 외 " + (pack.length - 3) + "명…"));
+      if(unknown.length) prev.appendChild(el("div", "warnbox", "우리 반 학번으로 이어지지 않아 건너뜁니다: " + unknown.join(", ")));
+      if(mismatch.length) prev.appendChild(el("div", "warnbox", "명단과 이름이 다릅니다. 그대로 저장해도 되지만 한 번 확인해 주세요.\n" + mismatch.join("\n")));
+      $("im-save").hidden = false;
+    })["catch"](function(ex){
+      clear(prev);
+      prev.hidden = true;
+      importReady = null;
+      var msg = "파일을 읽지 못했습니다.";
+      if(ex && ex.message === "nomatch") msg = "우리 반(20601~20621) 학생을 찾지 못했습니다. 2학년 6반 파일이 맞는지 확인해 주세요.";
+      else if(ex && ex.message === "empty") msg = "표에서 과목을 찾지 못했습니다. 나이스 ‘교과학습발달상황’ 엑셀이 맞는지 확인해 주세요.";
+      else if(!window.XLSX) msg = "엑셀을 읽는 도구를 내려받지 못했습니다. 인터넷 연결을 확인하고 다시 열어 주세요.";
+      showErr("im-err", msg);
+    });
+  });
+  $("im-save").addEventListener("click", function(){
+    if(!importReady) return;
+    var btn = $("im-save");
+    btn.disabled = true;
+    btn.textContent = "저장 중…";
+    var work;
+    if(State.cloud){
+      var batch = FB.db.batch();
+      importReady.forEach(function(p){
+        batch.set(FB.db.collection("grades").doc(p.sid), {
+          name: p.name, rows: p.rows, updatedAt: Date.now()
+        });
+      });
+      work = batch.commit();
+    } else {
+      importReady.forEach(function(p){
+        State.grades[p.sid] = {name:p.name, rows:p.rows, updatedAt:Date.now()};
+      });
+      lsSet("a26.grades", State.grades);
+      work = Promise.resolve();
+    }
+    work.then(function(){
+      var n = importReady.length;
+      closeSheets();
+      toast(n + "명 성적을 저장했습니다");
+      render();
+    })["catch"](function(err){
+      showErr("im-err", saveErrText(err));
+    })["then"](function(){
+      btn.disabled = false;
+      btn.textContent = "저장";
+    });
+  });
+
+  /* 대학 환산표 */
+  var editingUni = null, uniAreas = [];
+  function renderUniAreas(){
+    var box = $("u-areas");
+    clear(box);
+    ALL_AREAS.forEach(function(a){
+      var b = el("button", "pick", a.replace("(역사/도덕포함)", "").replace("기술·가정/정보", "기가·정보").replace("제2외국어/한문", "제2외"));
+      b.type = "button";
+      b.style.setProperty("--tc", "var(--t-task)");
+      b.setAttribute("aria-pressed", uniAreas.indexOf(a) >= 0 ? "true" : "false");
+      b.addEventListener("click", function(){
+        var i = uniAreas.indexOf(a);
+        if(i >= 0) uniAreas.splice(i, 1); else uniAreas.push(a);
+        renderUniAreas();
+      });
+      box.appendChild(b);
+    });
+  }
+  function openUni(u){
+    editingUni = u;
+    uniAreas = u ? u.areas.slice() : [];
+    $("un-title").textContent = u ? "환산표 수정" : "대학 환산표 추가";
+    $("u-name").value = u ? u.name : "";
+    [1,2,3,4,5].forEach(function(i){
+      $("u-s" + i).value = (u && u.scale[i] != null) ? u.scale[i] : "";
+      $("u-a" + i).value = (u && u.achScale[ACH_ORDER[i-1]] != null) ? u.achScale[ACH_ORDER[i-1]] : "";
+    });
+    $("u-useach").checked = u ? !!u.useAch : false;
+    $("u-achwrap").hidden = !$("u-useach").checked;
+    $("u-note").value = u ? u.note : "";
+    $("u-delete").hidden = !u;
+    $("un-err").hidden = true;
+    renderUniAreas();
+    openSheet("sheet-uni");
+    if(!u) setTimeout(function(){ $("u-name").focus(); }, 280);
+  }
+  $("u-useach").addEventListener("change", function(){
+    $("u-achwrap").hidden = !this.checked;
+  });
+  $("un-form").addEventListener("submit", function(e){
+    e.preventDefault();
+    $("un-err").hidden = true;
+    var name = $("u-name").value.trim();
+    if(!name){ showErr("un-err", "대학 이름을 적어 주세요."); return; }
+    var scale = {}, missing = [];
+    [1,2,3,4,5].forEach(function(i){
+      var v = parseFloat($("u-s" + i).value);
+      if(isFinite(v)) scale[i] = v; else missing.push(i);
+    });
+    if(missing.length === 5){ showErr("un-err", "등급별 환산점수를 넣어 주세요."); return; }
+    var achScale = {};
+    if($("u-useach").checked){
+      ACH_ORDER.forEach(function(a, i){
+        var v = parseFloat($("u-a" + (i+1)).value);
+        if(isFinite(v)) achScale[a] = v;
+      });
+    }
+    var body = {name:name, scale:scale, areas:uniAreas.slice(),
+                useAch:$("u-useach").checked, achScale:achScale, note:$("u-note").value.trim()};
+    var id = editingUni ? editingUni.id : uid();
+    var work;
+    if(State.cloud) work = FB.db.collection("unis").doc(id).set(body);
+    else {
+      var i = State.unis.map(function(x){ return x.id; }).indexOf(id);
+      body.id = id;
+      if(i >= 0) State.unis[i] = body; else State.unis.push(body);
+      lsSet("a26.unis", State.unis);
+      work = Promise.resolve();
+    }
+    work.then(function(){ closeSheets(); toast(editingUni ? "고쳤습니다" : "추가했습니다"); render(); })
+      ["catch"](function(err){ showErr("un-err", saveErrText(err)); });
+  });
+  $("u-delete").addEventListener("click", function(){
+    if(!editingUni || !window.confirm("이 환산표를 지울까요?")) return;
+    var id = editingUni.id;
+    var work = State.cloud ? FB.db.collection("unis").doc(id)["delete"]() : Promise.resolve();
+    if(!State.cloud){
+      State.unis = State.unis.filter(function(x){ return x.id !== id; });
+      lsSet("a26.unis", State.unis);
+    }
+    work.then(function(){ closeSheets(); toast("지웠습니다"); render(); });
   });
 
   /* 명단 */
