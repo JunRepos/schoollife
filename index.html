@@ -702,7 +702,7 @@
 <div class="sheet" id="sheet-event" role="dialog" aria-modal="true" aria-labelledby="ev-title">
   <div class="grabber"></div>
   <h2 id="ev-title">일정 추가</h2>
-  <p class="lead">수행평가·지필고사·학교 행사 일정을 학생들에게 알립니다.</p>
+  <p class="lead" id="ev-lead">수행평가·지필고사·학교 행사 일정을 학생들에게 알립니다.</p>
   <form id="ev-form">
     <div class="field">
       <label>유형</label>
@@ -1123,7 +1123,9 @@ var FIREBASE_CONFIG = {
         FB.db.collection("events").onSnapshot(function(snap){
           State.events = snap.docs.map(function(d){
             var v = d.data() || {};
-            return {id:d.id, type:v.type||"etc", title:v.title||"", subject:v.subject||"", date:v.date||TODAY, memo:v.memo||""};
+            return {id:d.id, type:v.type||"etc", title:v.title||"", subject:v.subject||"",
+                    date:v.date||TODAY, memo:v.memo||"", by:v.by||"",
+                    createdAt:v.createdAt||0, updatedAt:v.updatedAt||0};
           });
           render();
         }, quiet);
@@ -1436,7 +1438,7 @@ var FIREBASE_CONFIG = {
   function eventRow(ev, opts){
     opts = opts || {};
     var tp = TYPE_MAP[ev.type] || TYPE_MAP.etc;
-    var row = el("div", "ev" + (State.teacher ? " tap" : ""));
+    var row = el("div", "ev tap");
     row.style.setProperty("--tc", tp.color);
     var body = el("div", "ev-body");
     body.appendChild(el("div", "ev-title", ev.title));
@@ -1444,6 +1446,7 @@ var FIREBASE_CONFIG = {
     meta.appendChild(el("span", "tag", tp.label));
     if(ev.subject) meta.appendChild(el("span", null, ev.subject));
     if(!opts.hideDate) meta.appendChild(el("span", null, mdText(ev.date)));
+    if(ev.by) meta.appendChild(el("span", null, ev.by + " 올림"));
     body.appendChild(meta);
     if(ev.memo) body.appendChild(el("div", "ev-memo", ev.memo));
     row.appendChild(body);
@@ -1451,14 +1454,12 @@ var FIREBASE_CONFIG = {
       var n = diffDays(ev.date, TODAY);
       row.appendChild(el("div", "ev-dday" + (n < 0 ? " past" : ""), ddayText(n)));
     }
-    if(State.teacher){
-      row.tabIndex = 0;
-      row.setAttribute("role", "button");
-      row.addEventListener("click", function(){ openEvent(ev); });
-      row.addEventListener("keydown", function(e){
-        if(e.key === "Enter" || e.key === " "){ e.preventDefault(); openEvent(ev); }
-      });
-    }
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    row.addEventListener("click", function(){ openEvent(ev); });
+    row.addEventListener("keydown", function(e){
+      if(e.key === "Enter" || e.key === " "){ e.preventDefault(); openEvent(ev); }
+    });
     return row;
   }
 
@@ -1801,12 +1802,10 @@ var FIREBASE_CONFIG = {
     clear(box);
     var list = byDate[calSelected] || [];
     if(!list.length){
-      if(State.teacher){
-        var add = el("button", "btn", "이 날에 일정 추가");
-        add.type = "button"; add.style.width = "100%";
-        add.addEventListener("click", function(){ openEvent({date:calSelected}); });
-        box.appendChild(add);
-      } else box.appendChild(emptyBox("이 날은 비어 있어요", ""));
+      var add = el("button", "btn", "이 날에 일정 추가");
+      add.type = "button"; add.style.width = "100%";
+      add.addEventListener("click", function(){ openEvent({date:calSelected}); });
+      box.appendChild(add);
     } else {
       var wrap = el("div", "events");
       list.forEach(function(ev){ wrap.appendChild(eventRow(ev, {hideDate:true, hideDday:true})); });
@@ -2286,13 +2285,14 @@ var FIREBASE_CONFIG = {
     var fab = $("fab");
     clear(fab);
     var label = null, action = null;
-    if(State.teacher){
+    // 일정은 학생도 올릴 수 있습니다.
+    if(activeTab === "plan"){
+      label = "일정 추가"; action = function(){ openEvent({date: planMode === "cal" ? calSelected : TODAY}); };
+    } else if(State.teacher){
       if(activeTab === "home" || (activeTab === "notice" && noticeMode === "notice")){
         label = "전달사항 쓰기"; action = function(){ openNotice(null); };
       } else if(activeTab === "notice" && noticeMode === "res"){
         label = "자료 올리기"; action = function(){ openRes(null); };
-      } else if(activeTab === "plan"){
-        label = "일정 추가"; action = function(){ openEvent({date: planMode === "cal" ? calSelected : TODAY}); };
       } else if(activeTab === "rec" && State.recSel){
         label = "기록 남기기"; action = function(){ openEntry(null); };
       }
@@ -2786,7 +2786,10 @@ var FIREBASE_CONFIG = {
     setDate("f-date", ev.date || TODAY);
     $("f-subject").value = ev.subject || "";
     $("f-memo").value = ev.memo || "";
-    $("f-delete").hidden = !editingEvent;
+    $("f-delete").hidden = !editingEvent || !State.teacher;   // 삭제는 선생님만
+    $("ev-lead").textContent = State.teacher
+      ? "수행평가·지필고사·학교 행사 일정을 학생들에게 알립니다."
+      : "반 친구들이 같이 보는 일정입니다. 잘못 올렸으면 다시 눌러 고칠 수 있어요. 지우는 건 선생님만 됩니다.";
     $("ev-err").hidden = true;
     renderTypePicks();
     var dl = $("subject-list");
@@ -2807,7 +2810,10 @@ var FIREBASE_CONFIG = {
     var was = editingEvent;
     put("events", was ? was.id : uid(), {
       type:sheetType, title:title, date:getDate("f-date"),
-      subject:$("f-subject").value.trim(), memo:$("f-memo").value.trim()
+      subject:$("f-subject").value.trim(), memo:$("f-memo").value.trim(),
+      by: State.teacher ? "선생님" : (State.sid || "학생"),
+      createdAt: was ? (was.createdAt || Date.now()) : Date.now(),
+      updatedAt: Date.now()
     }, "events").then(function(){
       closeSheets(); toast(was ? "고쳤습니다" : "올렸습니다");
     })["catch"](function(err){ showErr("ev-err", saveErrText(err)); });

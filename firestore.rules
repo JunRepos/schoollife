@@ -26,9 +26,23 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isTeacher();
     }
+    // ── 학급 일정: 학생도 올리고 고칠 수 있습니다 ─────────────────
+    // 지우는 것은 선생님만. 시험 일정이 말없이 사라지는 일을 막기 위해서입니다.
     match /events/{id} {
       allow read: if true;
-      allow write: if isTeacher();
+      allow create, update:
+        if request.resource.data.keys().hasAll(['type', 'title', 'date'])
+        && request.resource.data.keys().hasOnly(['type','title','date','subject','memo','by','createdAt','updatedAt'])
+        && request.resource.data.type in ['perf', 'exam', 'school', 'etc']
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 60
+        && request.resource.data.date is string
+        && request.resource.data.date.size() == 10
+        && (!('memo' in request.resource.data) || request.resource.data.memo.size() <= 500)
+        && (!('subject' in request.resource.data) || request.resource.data.subject.size() <= 30)
+        && (!('by' in request.resource.data) || request.resource.data.by.size() <= 20);
+      allow delete: if isTeacher();
     }
 
     // ── 면담 예약: 자리가 찼는지 여부만 공개 ──────────────────────
