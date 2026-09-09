@@ -1035,7 +1035,7 @@ var FIREBASE_CONFIG = {
     cloud:false, teacher:false, user:null, sid:lsGet("a26.sid") || "",
     notices:[], events:[], bookings:[], details:{}, resources:[],
     roster:{}, entries:[], entriesFor:"", recSel:"",
-    grades:{}, unis:[], recMode:"rec"
+    grades:{}, unis:[], recMode:"rec", scoreMode:"area"
   };
 
   /* ---------------- 데모(로컬) ---------------- */
@@ -1991,6 +1991,47 @@ var FIREBASE_CONFIG = {
   }
   function fmt(n, d){ return n == null ? "—" : n.toFixed(d == null ? 2 : d); }
 
+  // 과목 표 한 덩어리. sub 가 "term" 이면 부제목에 학기를, "area" 면 교과를 씁니다.
+  function gradeTable(rs, sub){
+    var wrap = el("div", "gtbl-wrap");
+    var tbl = el("table", "gtbl");
+    var thead = el("thead");
+    var hr = el("tr");
+    ["과목", "학점", "원점수/평균", "성취도", "등급", "수강자"].forEach(function(t, i){
+      var th = el("th", i >= 1 ? "n" : null, t);
+      if(i === 0) th.className = "";
+      hr.appendChild(th);
+    });
+    thead.appendChild(hr);
+    tbl.appendChild(thead);
+    var tb = el("tbody");
+    rs.forEach(function(r){
+      var tr = el("tr");
+      var td0 = el("td");
+      td0.appendChild(el("div", "sub", r.subject));
+      var caption = sub === "term" ? termLabel(termKey(r)) : r.area;
+      td0.appendChild(el("div", "area", caption + (r.note ? " · " + r.note : "")));
+      tr.appendChild(td0);
+      tr.appendChild(el("td", "n", r.credit == null ? "—" : String(r.credit)));
+      tr.appendChild(el("td", "n", r.score == null ? "—" : (r.score + " / " + r.avg)));
+      var td3 = el("td", "n");
+      if(r.ach) td3.appendChild(el("span", "achbadge " + r.ach, r.ach));
+      else td3.appendChild(document.createTextNode("—"));
+      tr.appendChild(td3);
+      tr.appendChild(el("td", "n rk", r.rank ? String(r.rank) : "—"));
+      tr.appendChild(el("td", "n", r.count ? String(r.count) : "—"));
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb);
+    wrap.appendChild(tbl);
+    return wrap;
+  }
+  function byTerm(a, b){
+    var ka = termKey(a), kb = termKey(b);
+    if(ka !== kb) return ka < kb ? -1 : 1;
+    return a.area === b.area ? (a.subject < b.subject ? -1 : 1) : (a.area < b.area ? -1 : 1);
+  }
+
   function renderScore(box, sid){
     var rows = gradeRows(sid);
     if(!rows.length){
@@ -1999,30 +2040,35 @@ var FIREBASE_CONFIG = {
     }
     var ranked = rows.filter(function(r){ return r.rank; });
     var avg5 = wAvgRank(rows);
-    var main = rows.filter(function(r){ return MAIN_AREAS.indexOf(r.area) >= 0; });
     var g9 = to9(avg5);
 
     var tiles = el("div", "tiles");
-    tiles.appendChild(tile("평균 등급", fmt(avg5), "학점 가중 · 5등급제", true));
-    tiles.appendChild(tile("주요교과", fmt(wAvgRank(main)), "국·수·영·사·과"));
+    tiles.appendChild(tile("전체 평균", fmt(avg5), "학점 가중 · 5등급제", true));
+    GROUPS.forEach(function(gp){
+      var rs = rowsOfGroup(rows, gp.id);
+      var v = wAvgRank(rs);
+      var t = tile(gp.label, fmt(v), v == null ? "성취도만 " + rs.length + "과목" : rs.filter(function(r){ return r.rank; }).length + "과목 · " + sumCredit(rs) + "학점");
+      t.querySelector(".v").style.color = gp.color;
+      tiles.appendChild(t);
+    });
     tiles.appendChild(tile("9등급 환산", fmt(g9), avg5 == null ? "등급 과목 없음" : "추정 상위 " + fmt(pctFrom5(avg5), 1) + "%"));
-    tiles.appendChild(tile("원점수 평균", fmt(avgScore(rows), 1), ranked.length + "개 과목"));
     tiles.appendChild(tile("이수 학점", String(sumCredit(rows)), "등급 과목 " + sumCredit(ranked) + "학점"));
     box.appendChild(tiles);
 
-    // 교과별 평균
+    // 세부 교과별 평균 — 국영수 안에서도 어느 과목이 약한지 보이도록
     var areaSec = el("section");
     areaSec.style.borderTop = "0";
     areaSec.style.paddingTop = "4px";
     var ah = el("div", "sec-head");
     ah.appendChild(el("h2", null, "교과별 평균 등급"));
+    ah.appendChild(el("span", "sec-note", "낮을수록 김"));
     areaSec.appendChild(ah);
     ALL_AREAS.forEach(function(a){
       var rs = rows.filter(function(r){ return r.area === a && r.rank; });
       if(!rs.length) return;
       var v = wAvgRank(rs);
       var row = el("div", "barrow");
-      row.style.setProperty("--tc", MAIN_AREAS.indexOf(a) >= 0 ? "var(--t-task)" : "var(--muted)");
+      row.style.setProperty("--tc", (GROUPS.filter(function(g){ return g.id === groupOf(a); })[0] || GROUPS[3]).color);
       row.appendChild(el("div", "lb", a.replace("(역사/도덕포함)", "").replace("기술·가정/정보", "기가·정보").replace("제2외국어/한문", "제2외/한문")));
       var bar = el("div", "bar");
       var fill = el("i");
@@ -2034,52 +2080,73 @@ var FIREBASE_CONFIG = {
     });
     box.appendChild(areaSec);
 
-    // 학기별 표
-    termsOf(rows).forEach(function(k){
-      var rs = rows.filter(function(r){ return termKey(r) === k; });
-      var sec = el("section");
-      var h = el("div", "sec-head");
-      h.appendChild(el("h2", null, termLabel(k)));
-      var ta = wAvgRank(rs);
-      h.appendChild(el("span", "sec-note", (ta != null ? "평균 " + ta.toFixed(2) + "등급 · " : "") + sumCredit(rs) + "학점"));
-      sec.appendChild(h);
-
-      var wrap = el("div", "gtbl-wrap");
-      var tbl = el("table", "gtbl");
-      var thead = el("thead");
-      var hr = el("tr");
-      ["과목", "학점", "원점수/평균", "성취도", "등급", "수강자"].forEach(function(t, i){
-        var th = el("th", i >= 1 ? "n" : null, t);
-        if(i === 0) th.className = "";
-        hr.appendChild(th);
-      });
-      thead.appendChild(hr);
-      tbl.appendChild(thead);
-      var tb = el("tbody");
-      rs.forEach(function(r){
-        var tr = el("tr");
-        var td0 = el("td");
-        td0.appendChild(el("div", "sub", r.subject));
-        td0.appendChild(el("div", "area", r.area + (r.note ? " · " + r.note : "")));
-        tr.appendChild(td0);
-        tr.appendChild(el("td", "n", r.credit == null ? "—" : String(r.credit)));
-        tr.appendChild(el("td", "n", r.score == null ? "—" : (r.score + " / " + r.avg)));
-        var td3 = el("td", "n");
-        if(r.ach) td3.appendChild(el("span", "achbadge " + r.ach, r.ach));
-        else td3.appendChild(document.createTextNode("—"));
-        tr.appendChild(td3);
-        tr.appendChild(el("td", "n rk", r.rank ? String(r.rank) : "—"));
-        tr.appendChild(el("td", "n", r.count ? String(r.count) : "—"));
-        tb.appendChild(tr);
-      });
-      tbl.appendChild(tb);
-      wrap.appendChild(tbl);
-      sec.appendChild(wrap);
-      box.appendChild(sec);
+    // 계열별 / 학기별 전환
+    var seg = el("div", "seg");
+    seg.style.marginTop = "16px";
+    [["area", "계열별"], ["term", "학기별"]].forEach(function(p){
+      var b = el("button", null, p[1]);
+      b.type = "button";
+      b.setAttribute("aria-pressed", State.scoreMode === p[0] ? "true" : "false");
+      b.addEventListener("click", function(){ State.scoreMode = p[0]; render(); });
+      seg.appendChild(b);
     });
+    box.appendChild(seg);
+
+    if(State.scoreMode === "term"){
+      termsOf(rows).forEach(function(k){
+        var rs = rows.filter(function(r){ return termKey(r) === k; });
+        var sec = el("section");
+        var h = el("div", "sec-head");
+        h.appendChild(el("h2", null, termLabel(k)));
+        var ta = wAvgRank(rs);
+        h.appendChild(el("span", "sec-note", (ta != null ? "평균 " + ta.toFixed(2) + "등급 · " : "") + sumCredit(rs) + "학점"));
+        sec.appendChild(h);
+        sec.appendChild(gradeTable(rs, "area"));
+        box.appendChild(sec);
+      });
+    } else {
+      GROUPS.forEach(function(gp){
+        var rs = rowsOfGroup(rows, gp.id).slice().sort(byTerm);
+        if(!rs.length) return;
+        var withRank = rs.filter(function(r){ return r.rank; });
+        var achOnly  = rs.filter(function(r){ return !r.rank; });
+        var v = wAvgRank(rs);
+
+        var sec = el("section");
+        var h = el("div", "sec-head");
+        var t = el("h2", null, gp.label);
+        t.style.color = gp.color;
+        h.appendChild(t);
+        h.appendChild(el("span", "sec-note",
+          (v != null ? "평균 " + v.toFixed(2) + "등급 · " : "") + rs.length + "과목 " + sumCredit(rs) + "학점"));
+        sec.appendChild(h);
+
+        // 어떤 교과가 들어 있는 계열인지
+        var areas = [];
+        rs.forEach(function(r){ if(areas.indexOf(r.area) < 0) areas.push(r.area); });
+        var sub = el("div", "srcnote");
+        sub.style.margin = "0 0 10px";
+        sub.textContent = areas.join(" · ");
+        sec.appendChild(sub);
+
+        if(withRank.length) sec.appendChild(gradeTable(withRank, "term"));
+        if(achOnly.length){
+          var lab = el("div", "sec-head");
+          lab.style.margin = "14px 0 8px";
+          lab.appendChild(el("h2", null, "성취도만 나오는 과목"));
+          lab.querySelector("h2").style.fontSize = "13.5px";
+          lab.appendChild(el("span", "sec-note", achOnly.length + "과목 " + sumCredit(achOnly) + "학점"));
+          sec.appendChild(lab);
+          sec.appendChild(gradeTable(achOnly, "term"));
+        }
+        box.appendChild(sec);
+      });
+    }
 
     var note = el("p", "srcnote");
-    note.textContent = "9등급 환산은 공식 대응표가 없습니다. 5등급 각 구간의 한가운데를 누적 상위 %로 잡고 9등급 척도에 옮긴 추정치라, 기관마다 발표하는 값과 0.3등급 안팎으로 다를 수 있습니다. 실제 지원 판단에는 참고로만 쓰세요.";
+    note.textContent = "체육·예술·교양 교과와 과학탐구실험은 고교학점제에서 석차등급 없이 성취도만 나옵니다. 평균 등급 계산에서는 빠집니다. "
+      + "9등급 환산은 공식 대응표가 없어, 5등급 각 구간의 한가운데를 누적 상위 %로 잡고 9등급 척도에 옮긴 추정치입니다. "
+      + "기관마다 발표하는 값과 0.3등급 안팎으로 다를 수 있으니 지원 판단에는 참고로만 쓰세요.";
     box.appendChild(note);
   }
 
@@ -2250,6 +2317,22 @@ var FIREBASE_CONFIG = {
   var G5_MID = [5, 22, 50, 78, 95];                            // 각 등급 구간의 한가운데
   var G9_MID = [2, 7.5, 17, 31.5, 50, 68.5, 83, 92.5, 98];     // 9등급 각 구간의 한가운데
   var MAIN_AREAS = ["국어", "수학", "영어", "사회(역사/도덕포함)", "과학"];
+  // 계열 — 국영수 / 사회 / 과학 / 교양(그 밖의 모든 교과)
+  var GROUPS = [
+    {id:"kem", label:"국영수", areas:["국어", "영어", "수학"],        color:"var(--t-task)"},
+    {id:"soc", label:"사회",   areas:["사회(역사/도덕포함)"],          color:"var(--t-perf)"},
+    {id:"sci", label:"과학",   areas:["과학"],                        color:"var(--t-prep)"},
+    {id:"lib", label:"교양",   areas:null,                            color:"var(--t-etc)"}   // 나머지 전부
+  ];
+  function groupOf(area){
+    for(var i = 0; i < GROUPS.length; i++){
+      if(GROUPS[i].areas && GROUPS[i].areas.indexOf(area) >= 0) return GROUPS[i].id;
+    }
+    return "lib";
+  }
+  function rowsOfGroup(rows, gid){
+    return rows.filter(function(r){ return groupOf(r.area) === gid; });
+  }
   var ALL_AREAS = ["국어","수학","영어","사회(역사/도덕포함)","과학","기술·가정/정보","제2외국어/한문","체육","예술","교양"];
   var ACH_ORDER = ["A","B","C","D","E"];
 
