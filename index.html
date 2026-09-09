@@ -309,6 +309,11 @@
   }
   body.wide .sheet.open{transform:translate(-50%,-50%) scale(1); opacity:1}
   body.wide .grabber{display:none}
+  /* 닫혀 있는 시트는 클릭을 가로채지 않습니다. 넓은 화면에서는 시트들이
+     모두 화면 한가운데에 겹쳐 있어서, 이게 없으면 맨 뒤 시트가 열려 있는
+     시트의 버튼을 덮어 버립니다. */
+  .sheet{pointer-events:none}
+  .sheet.open{pointer-events:auto}
   @media (prefers-reduced-motion:reduce){ .sheet, .scrim{transition:none} }
   .grabber{width:36px; height:4px; border-radius:99px; background:var(--rule); margin:0 auto 14px}
   .sheet h2{margin-bottom:6px; font-size:17px}
@@ -603,7 +608,7 @@
 <div class="sheet" id="sheet-event" role="dialog" aria-modal="true" aria-labelledby="ev-title">
   <div class="grabber"></div>
   <h2 id="ev-title">일정 추가</h2>
-  <p class="lead">수행평가·지필고사·과제 일정을 학생들에게 알립니다.</p>
+  <p class="lead">수행평가·지필고사·학교 행사 일정을 학생들에게 알립니다.</p>
   <form id="ev-form">
     <div class="field">
       <label>유형</label>
