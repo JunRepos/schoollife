@@ -233,6 +233,52 @@
   .entry-text{font-size:13.5px; line-height:1.6; white-space:pre-wrap; word-break:break-word}
   .back-btn{border:1px solid var(--rule); background:var(--surface); border-radius:9px; padding:6px 12px; font-size:12.5px; font-weight:600; cursor:pointer; margin-bottom:14px}
 
+  /* 일정 사진 */
+  .ev-photos{display:flex; gap:6px; flex-wrap:wrap; margin-top:6px}
+  .ev-photo{
+    width:62px; height:62px; border-radius:8px; overflow:hidden; border:1px solid var(--rule);
+    background:var(--surface-2); cursor:zoom-in; padding:0; display:block; flex:0 0 auto;
+  }
+  .ev-photo img{width:100%; height:100%; object-fit:cover; display:block}
+  .shot-row{display:flex; gap:8px; flex-wrap:wrap; margin-top:9px}
+  .shot{position:relative; width:70px; height:70px; border-radius:9px; overflow:hidden; border:1px solid var(--rule)}
+  .shot img{width:100%; height:100%; object-fit:cover; display:block}
+  .shot button{
+    position:absolute; top:3px; right:3px; width:20px; height:20px; border-radius:50%;
+    border:0; background:rgba(12,14,20,.72); color:#fff; font-size:13px; line-height:1;
+    cursor:pointer; display:grid; place-items:center; padding:0;
+  }
+
+  /* 사진 크게 보기 */
+  .imgview{
+    position:fixed; inset:0; z-index:70; background:#0b0d12;
+    display:none; touch-action:none; overflow:hidden; overscroll-behavior:contain;
+  }
+  .imgview.open{display:block}
+  .imgview img{
+    position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform;
+    -webkit-user-select:none; user-select:none; -webkit-user-drag:none;
+  }
+  .iv-bar{
+    position:absolute; left:0; right:0; top:0; z-index:2;
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:calc(10px + env(safe-area-inset-top)) 14px 10px;
+    background:linear-gradient(rgba(11,13,18,.85), rgba(11,13,18,0));
+    color:#EDEEF2; font-size:12.5px; pointer-events:none;
+  }
+  .iv-bar .cap{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; opacity:.85}
+  .iv-bar button{
+    pointer-events:auto; border:0; background:rgba(255,255,255,.14); color:#fff;
+    width:34px; height:34px; border-radius:50%; font-size:17px; line-height:1; cursor:pointer;
+    display:grid; place-items:center; flex:0 0 auto; padding:0;
+  }
+  .iv-hint{
+    position:absolute; left:50%; bottom:calc(18px + env(safe-area-inset-bottom));
+    transform:translateX(-50%); z-index:2; color:#C8CBD4; font-size:12px;
+    background:rgba(11,13,18,.7); padding:7px 13px; border-radius:99px; pointer-events:none;
+    transition:opacity .3s;
+  }
+
   /* 성적 */
   .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(112px,1fr)); gap:9px; margin-bottom:16px}
   .tile{background:var(--surface); border:1px solid var(--rule); border-radius:12px; padding:11px 13px 12px}
@@ -738,6 +784,15 @@
       <label for="f-memo">안내</label>
       <textarea id="f-memo"></textarea>
     </div>
+    <div class="field">
+      <label>사진 — 유인물이나 칠판을 찍어 올리면 크게 볼 수 있습니다</label>
+      <label class="filepick" id="f-drop">
+        <b>사진 고르기</b>
+        <span>한 번에 여러 장, 최대 5장</span>
+        <input type="file" id="f-photo" accept="image/*" multiple hidden>
+      </label>
+      <div class="shot-row" id="f-shots"></div>
+    </div>
     <p class="form-err" id="ev-err" hidden></p>
     <div class="sheet-actions">
       <button type="button" class="btn danger" id="f-delete" hidden>삭제</button>
@@ -901,6 +956,16 @@
       <button type="submit" class="btn primary">등록</button>
     </div>
   </form>
+</div>
+
+<!-- 사진 크게 보기 -->
+<div class="imgview" id="imgview" role="dialog" aria-modal="true" aria-label="사진 크게 보기">
+  <img id="iv-img" alt="">
+  <div class="iv-bar">
+    <span class="cap" id="iv-cap"></span>
+    <button type="button" id="iv-close" aria-label="닫기">✕</button>
+  </div>
+  <div class="iv-hint" id="iv-hint">두 손가락으로 벌리거나 두 번 두드리면 커집니다</div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1142,6 +1207,7 @@ var FIREBASE_CONFIG = {
             var v = d.data() || {};
             return {id:d.id, type:v.type||"etc", title:v.title||"", subject:v.subject||"",
                     date:v.date||TODAY, memo:v.memo||"", by:v.by||"",
+                    photos: Array.isArray(v.photos) ? v.photos : [],
                     createdAt:v.createdAt||0, updatedAt:v.updatedAt||0};
           });
           render();
@@ -1471,6 +1537,25 @@ var FIREBASE_CONFIG = {
     if(ev.by) meta.appendChild(el("span", null, ev.by + " 올림"));
     body.appendChild(meta);
     if(ev.memo) body.appendChild(el("div", "ev-memo", ev.memo));
+    if(ev.photos && ev.photos.length){
+      var ps = el("div", "ev-photos");
+      ev.photos.forEach(function(ph, i){
+        var b = el("button", "ev-photo");
+        b.type = "button";
+        b.setAttribute("aria-label", ev.title + " 사진 " + (i+1) + "장째, 눌러서 크게 보기");
+        var im = document.createElement("img");
+        im.src = ph.url;
+        im.alt = "";
+        im.loading = "lazy";
+        b.appendChild(im);
+        b.addEventListener("click", function(e){
+          e.stopPropagation();
+          openImage(ph.url, ev.title + (ev.photos.length > 1 ? " (" + (i+1) + "/" + ev.photos.length + ")" : ""));
+        });
+        ps.appendChild(b);
+      });
+      body.appendChild(ps);
+    }
     row.appendChild(body);
     if(!opts.hideDday){
       var n = diffDays(ev.date, TODAY);
@@ -2463,6 +2548,176 @@ var FIREBASE_CONFIG = {
     return out;
   }
 
+  /* ================= 사진 크게 보기 =================
+     글자를 읽어야 하므로 원본 크기보다 더 크게도 늘어납니다.
+     두 손가락으로 벌리기 / 두 번 두드리기 / 휠 / 끌기. */
+  var IV = {s:1, x:0, y:0, fit:1, max:1, nw:0, nh:0, drag:null, pinch:null, lastTap:0};
+
+  function ivApply(){
+    var img = $("iv-img");
+    img.style.transform = "translate(" + IV.x + "px," + IV.y + "px) scale(" + IV.s + ")";
+  }
+  function ivClamp(){
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var w = IV.nw * IV.s, h = IV.nh * IV.s;
+    // 화면보다 작으면 가운데로, 크면 빈 틈이 생기지 않게
+    IV.x = w <= vw ? (vw - w) / 2 : Math.min(0, Math.max(vw - w, IV.x));
+    IV.y = h <= vh ? (vh - h) / 2 : Math.min(0, Math.max(vh - h, IV.y));
+  }
+  function ivZoomAt(ns, cx, cy){
+    ns = Math.max(IV.fit, Math.min(IV.max, ns));
+    if(ns === IV.s) return;
+    // 손가락(또는 커서) 아래 지점이 그대로 있도록
+    IV.x = cx - (cx - IV.x) * (ns / IV.s);
+    IV.y = cy - (cy - IV.y) * (ns / IV.s);
+    IV.s = ns;
+    ivClamp();
+    ivApply();
+  }
+  function ivReset(){
+    var vw = window.innerWidth, vh = window.innerHeight;
+    IV.fit = Math.min(vw / IV.nw, vh / IV.nh);
+    if(!isFinite(IV.fit) || IV.fit <= 0) IV.fit = 1;
+    // 글자를 읽을 수 있도록 원본의 4배까지 (화면에 꽉 차는 배율보다는 항상 크게)
+    IV.max = Math.max(IV.fit * 6, 4);
+    IV.s = IV.fit;
+    ivClamp();
+    ivApply();
+  }
+  function openImage(url, caption){
+    var view = $("imgview"), img = $("iv-img");
+    $("iv-cap").textContent = caption || "";
+    var hint = $("iv-hint");
+    hint.style.opacity = "1";
+    view.classList.add("open");
+    document.body.style.overflow = "hidden";
+    img.onload = function(){
+      IV.nw = img.naturalWidth || 1;
+      IV.nh = img.naturalHeight || 1;
+      img.style.width = IV.nw + "px";
+      img.style.height = IV.nh + "px";
+      ivReset();
+      setTimeout(function(){ hint.style.opacity = "0"; }, 2600);
+    };
+    img.src = url;
+  }
+  function closeImage(){
+    $("imgview").classList.remove("open");
+    $("iv-img").src = "";
+    document.body.style.overflow = "";
+  }
+  $("iv-close").addEventListener("click", closeImage);
+
+  (function(){
+    var view = $("imgview");
+    function dist(t){ var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY; return Math.hypot(dx, dy); }
+    function mid(t){ return {x:(t[0].clientX + t[1].clientX)/2, y:(t[0].clientY + t[1].clientY)/2}; }
+
+    view.addEventListener("touchstart", function(e){
+      if(e.touches.length === 2){
+        IV.pinch = {d: dist(e.touches), s: IV.s, m: mid(e.touches)};
+        IV.drag = null;
+      } else if(e.touches.length === 1){
+        var now = Date.now();
+        if(now - IV.lastTap < 300){
+          // 두 번 두드리기 — 크게 / 원래대로
+          var t = e.touches[0];
+          ivZoomAt(IV.s > IV.fit * 1.2 ? IV.fit : Math.max(IV.fit * 3, 1.6), t.clientX, t.clientY);
+          IV.lastTap = 0;
+          e.preventDefault();
+          return;
+        }
+        IV.lastTap = now;
+        IV.drag = {x: e.touches[0].clientX - IV.x, y: e.touches[0].clientY - IV.y};
+      }
+    }, {passive:false});
+
+    view.addEventListener("touchmove", function(e){
+      if(IV.pinch && e.touches.length === 2){
+        e.preventDefault();
+        var d = dist(e.touches);
+        if(IV.pinch.d > 0) ivZoomAt(IV.pinch.s * (d / IV.pinch.d), IV.pinch.m.x, IV.pinch.m.y);
+      } else if(IV.drag && e.touches.length === 1){
+        e.preventDefault();
+        IV.x = e.touches[0].clientX - IV.drag.x;
+        IV.y = e.touches[0].clientY - IV.drag.y;
+        ivClamp();
+        ivApply();
+      }
+    }, {passive:false});
+
+    view.addEventListener("touchend", function(e){
+      if(e.touches.length < 2) IV.pinch = null;
+      if(e.touches.length === 0) IV.drag = null;
+    });
+
+    // 데스크톱 — 휠로 확대, 끌어서 이동, 두 번 눌러 확대
+    view.addEventListener("wheel", function(e){
+      e.preventDefault();
+      ivZoomAt(IV.s * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX, e.clientY);
+    }, {passive:false});
+    view.addEventListener("mousedown", function(e){
+      if(e.target.tagName === "BUTTON") return;
+      IV.drag = {x: e.clientX - IV.x, y: e.clientY - IV.y};
+      e.preventDefault();
+    });
+    window.addEventListener("mousemove", function(e){
+      if(!IV.drag || !$("imgview").classList.contains("open")) return;
+      IV.x = e.clientX - IV.drag.x;
+      IV.y = e.clientY - IV.drag.y;
+      ivClamp();
+      ivApply();
+    });
+    window.addEventListener("mouseup", function(){ IV.drag = null; });
+    view.addEventListener("dblclick", function(e){
+      ivZoomAt(IV.s > IV.fit * 1.2 ? IV.fit : Math.max(IV.fit * 3, 1.6), e.clientX, e.clientY);
+    });
+    window.addEventListener("resize", function(){
+      if($("imgview").classList.contains("open")) ivReset();
+    });
+  })();
+
+  /* 사진을 줄여서 올립니다 — 글자는 읽히면서 용량은 작게 */
+  function shrinkImage(file, maxEdge){
+    return new Promise(function(res){
+      if(!/^image\//.test(file.type || "")) return res(file);
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function(){
+        var w = img.naturalWidth, h = img.naturalHeight;
+        var k = Math.min(1, maxEdge / Math.max(w, h));
+        if(k >= 1 && file.size <= 1200000){ URL.revokeObjectURL(url); return res(file); }
+        var c = document.createElement("canvas");
+        c.width = Math.round(w * k);
+        c.height = Math.round(h * k);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob(function(b){
+          URL.revokeObjectURL(url);
+          if(!b || b.size >= file.size) return res(file);
+          b.name = (file.name || "photo").replace(/\.[^.]+$/, "") + ".jpg";
+          res(b);
+        }, "image/jpeg", 0.88);
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); res(file); };   // HEIC 등은 원본 그대로
+      img.src = url;
+    });
+  }
+  function uploadEventPhoto(eventId, file, onProgress){
+    if(!FB.st) return Promise.reject({code:"storage/no-bucket"});
+    var name = (file.name || "photo.jpg").replace(/[^\w.\-가-힣 ]/g, "_");
+    var path = "events/" + eventId + "/" + Date.now().toString(36) + "_" + name;
+    var task = FB.st.ref(path).put(file, {
+      contentType: file.type || "image/jpeg",
+      contentDisposition: "inline"
+    });
+    return new Promise(function(res, rej){
+      task.on("state_changed",
+        function(s){ if(onProgress && s.totalBytes) onProgress(s.bytesTransferred / s.totalBytes); },
+        rej,
+        function(){ task.snapshot.ref.getDownloadURL().then(function(url){ res({url:url, path:path}); }, rej); });
+    });
+  }
+
   /* ---------------- 날짜 고르기 ----------------
      브라우저마다 다르게 뜨는(또는 아예 안 뜨는) 기본 달력 대신,
      화면 안에 직접 그리는 작은 달력입니다. */
@@ -2630,7 +2885,8 @@ var FIREBASE_CONFIG = {
   });
   document.addEventListener("keydown", function(e){
     if(e.key !== "Escape") return;
-    if(DP.pop) closeDatePop();   // 달력이 열려 있으면 달력만 닫습니다
+    if($("imgview").classList.contains("open")) closeImage();
+    else if(DP.pop) closeDatePop();   // 달력이 열려 있으면 달력만 닫습니다
     else closeSheets();
   });
   Array.prototype.forEach.call(document.querySelectorAll("[data-go]"), function(b){
@@ -2914,9 +3170,47 @@ var FIREBASE_CONFIG = {
       box.appendChild(b);
     });
   }
+  var evShots = [];   // {url, path} 이미 올라간 것 + {file, preview} 새로 고른 것
+  function renderShots(){
+    var box = $("f-shots");
+    clear(box);
+    evShots.forEach(function(sh, i){
+      var w = el("div", "shot");
+      var im = document.createElement("img");
+      im.src = sh.url || sh.preview;
+      im.alt = "";
+      w.appendChild(im);
+      var x = el("button", null, "✕");
+      x.type = "button";
+      x.setAttribute("aria-label", (i+1) + "장째 사진 빼기");
+      x.addEventListener("click", function(){
+        if(sh.preview) URL.revokeObjectURL(sh.preview);
+        evShots.splice(i, 1);
+        renderShots();
+      });
+      w.appendChild(x);
+      box.appendChild(w);
+    });
+  }
+  $("f-photo").addEventListener("change", function(e){
+    var files = Array.prototype.slice.call(e.target.files || []);
+    $("ev-err").hidden = true;
+    files.forEach(function(f){
+      if(evShots.length >= 5) return;
+      if(!/^image\//.test(f.type || "")){ showErr("ev-err", "사진 파일만 올릴 수 있어요."); return; }
+      evShots.push({file:f, preview:URL.createObjectURL(f)});
+    });
+    if(files.length && evShots.length >= 5) showErr("ev-err", "사진은 5장까지만 올라갑니다.");
+    this.value = "";
+    renderShots();
+  });
+
   function openEvent(ev){
     ev = ev || {};
     editingEvent = ev.id ? ev : null;
+    evShots = (ev.photos || []).map(function(p){ return {url:p.url, path:p.path}; });
+    $("f-photo").value = "";
+    renderShots();
     sheetType = ev.type || "perf";
     $("ev-title").textContent = editingEvent ? "일정 수정" : "일정 추가";
     $("f-title").value = ev.title || "";
@@ -2945,15 +3239,46 @@ var FIREBASE_CONFIG = {
     var title = $("f-title").value.trim();
     if(!title){ showErr("ev-err", "제목을 적어 주세요."); $("f-title").focus(); return; }
     var was = editingEvent;
-    put("events", was ? was.id : uid(), {
-      type:sheetType, title:title, date:getDate("f-date"),
-      subject:$("f-subject").value.trim(), memo:$("f-memo").value.trim(),
-      by: State.teacher ? "선생님" : (State.sid || "학생"),
-      createdAt: was ? (was.createdAt || Date.now()) : Date.now(),
-      updatedAt: Date.now()
-    }, "events").then(function(){
+    var id = was ? was.id : uid();
+    var btn = $("ev-form").querySelector(".btn.primary");
+    var label = btn.textContent;
+    btn.disabled = true;
+
+    // 새로 고른 사진을 줄여서 올리고, 이미 올라간 것과 순서대로 합칩니다.
+    var todo = evShots.filter(function(s){ return s.file; }).length, done = 0;
+    var chain = evShots.map(function(sh){
+      if(sh.url) return function(){ return Promise.resolve({url:sh.url, path:sh.path || ""}); };
+      return function(){
+        btn.textContent = "사진 올리는 중 " + (done + 1) + "/" + todo;
+        return shrinkImage(sh.file, 2400).then(function(blob){
+          return uploadEventPhoto(id, blob);
+        }).then(function(r){ done++; return r; });
+      };
+    });
+    var photos = [];
+    var seq = chain.reduce(function(pr, fn){
+      return pr.then(fn).then(function(r){ photos.push(r); });
+    }, Promise.resolve());
+
+    seq.then(function(){
+      btn.textContent = "저장 중…";
+      return put("events", id, {
+        type:sheetType, title:title, date:getDate("f-date"),
+        subject:$("f-subject").value.trim(), memo:$("f-memo").value.trim(),
+        photos: photos,
+        by: State.teacher ? "선생님" : (State.sid || "학생"),
+        createdAt: was ? (was.createdAt || Date.now()) : Date.now(),
+        updatedAt: Date.now()
+      }, "events");
+    }).then(function(){
+      evShots = [];
       closeSheets(); toast(was ? "고쳤습니다" : "올렸습니다");
-    })["catch"](function(err){ showErr("ev-err", saveErrText(err)); });
+    })["catch"](function(ex){
+      showErr("ev-err", (ex && String(ex.code || "").indexOf("storage/") === 0) ? uploadErrText(ex) : saveErrText(ex));
+    })["then"](function(){
+      btn.disabled = false;
+      btn.textContent = label;
+    });
   });
   $("f-delete").addEventListener("click", function(){
     if(!editingEvent || !window.confirm("이 일정을 지울까요?")) return;
