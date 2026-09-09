@@ -326,6 +326,37 @@
   }
   .field textarea{resize:vertical; min-height:56px; line-height:1.5; font-size:15px}
   .row2{display:grid; grid-template-columns:1.35fr 1fr; gap:10px}
+
+  /* 날짜 고르기 — 브라우저 기본 달력 대신 직접 그립니다 */
+  .datebtn{
+    width:100%; border:1px solid var(--rule); background:var(--surface); color:var(--ink);
+    border-radius:10px; padding:10px 12px; font-family:inherit; font-size:16px; cursor:pointer;
+    display:flex; align-items:center; justify-content:space-between; gap:8px; text-align:left;
+  }
+  .datebtn svg{width:17px; height:17px; stroke:var(--muted); fill:none; stroke-width:1.6; stroke-linecap:round; flex:0 0 auto}
+  .datebtn[aria-expanded="true"]{border-color:var(--ink)}
+  .datepop{
+    position:fixed; z-index:60; width:290px; background:var(--paper);
+    border:1px solid var(--rule); border-radius:14px; padding:12px 14px 12px;
+    box-shadow:0 14px 44px -14px rgba(0,0,0,.5);
+  }
+  .datepop .cal-head{margin-bottom:8px}
+  .datepop .cal-title{font-size:15px}
+  .datepop .cal-nav button{width:28px; height:28px; border-radius:8px}
+  .datepop .dow-row span{padding:2px 0; font-size:10.5px}
+  .datepop .cal-grid{gap:1px}
+  .datepop .day{aspect-ratio:1/1; padding:0; justify-content:center}
+  .datepop .day .n{font-size:12.5px; width:26px; height:26px; border-radius:8px}
+  .datepop .day:hover:not(.out):not(.off) .n{background:var(--surface-2)}
+  .datepop .day.off{cursor:default}
+  .datepop .day.off .n{opacity:.28}
+  .datepop .day.sel .n{background:var(--ink); color:var(--paper); font-weight:600; border-radius:50%}
+  .datepop .day.today:not(.sel) .n{box-shadow:inset 0 0 0 1.5px var(--ink); border-radius:50%; background:transparent; color:var(--ink)}
+  .datepop-foot{display:flex; gap:8px; margin-top:9px; padding-top:9px; border-top:1px solid var(--rule-2)}
+  .datepop-foot button{
+    flex:1; border:1px solid var(--rule); background:var(--surface); color:var(--ink);
+    border-radius:9px; padding:8px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit;
+  }
   .picks{display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:6px}
   .pick{border:1px solid var(--rule); background:var(--surface); border-radius:10px; padding:9px 2px; font-size:11.5px; font-weight:600; cursor:pointer; color:var(--muted)}
   .pick[aria-pressed="true"]{background:var(--tc); border-color:var(--tc); color:#fff}
@@ -620,8 +651,8 @@
     </div>
     <div class="row2">
       <div class="field">
-        <label for="f-date">날짜</label>
-        <input type="date" id="f-date">
+        <label id="f-date-lb">날짜</label>
+        <button type="button" class="datebtn" id="f-date" aria-labelledby="f-date-lb" aria-haspopup="dialog" aria-expanded="false"><span class="dv"></span><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12.5" rx="2"/><path d="M3 8.5h14M7 2.8v3.2M13 2.8v3.2"/></svg></button>
       </div>
       <div class="field">
         <label for="f-subject">과목 (없어도 됩니다)</label>
@@ -671,8 +702,8 @@
   <p class="lead" id="mv-from"></p>
   <form id="mv-form">
     <div class="field">
-      <label for="m-date">옮길 날짜</label>
-      <input type="date" id="m-date">
+      <label id="m-date-lb">옮길 날짜</label>
+      <button type="button" class="datebtn" id="m-date" aria-labelledby="m-date-lb" aria-haspopup="dialog" aria-expanded="false"><span class="dv"></span><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12.5" rx="2"/><path d="M3 8.5h14M7 2.8v3.2M13 2.8v3.2"/></svg></button>
     </div>
     <div class="field">
       <label>옮길 시간대</label>
@@ -697,8 +728,8 @@
       <div class="picks" id="kind-picks"></div>
     </div>
     <div class="field">
-      <label for="e-date">날짜</label>
-      <input type="date" id="e-date">
+      <label id="e-date-lb">날짜</label>
+      <button type="button" class="datebtn" id="e-date" aria-labelledby="e-date-lb" aria-haspopup="dialog" aria-expanded="false"><span class="dv"></span><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12.5" rx="2"/><path d="M3 8.5h14M7 2.8v3.2M13 2.8v3.2"/></svg></button>
     </div>
     <div class="field">
       <label for="e-text">내용</label>
@@ -1852,12 +1883,154 @@ var FIREBASE_CONFIG = {
     document.body.classList.toggle("wide", State.teacher && window.innerWidth >= 1024);
   }
 
+  /* ---------------- 날짜 고르기 ----------------
+     브라우저마다 다르게 뜨는(또는 아예 안 뜨는) 기본 달력 대신,
+     화면 안에 직접 그리는 작은 달력입니다. */
+  var DP = {btn:null, cursor:null, pop:null, opts:null};
+
+  function dateLabel(ds){
+    var d = parseISO(ds);
+    return d.getFullYear() + "년 " + (d.getMonth()+1) + "월 " + d.getDate() + "일 (" + DOW_KO[d.getDay()] + ")";
+  }
+  function setDate(id, ds){
+    var btn = $(id);
+    btn.dataset.value = ds;
+    btn.querySelector(".dv").textContent = dateLabel(ds);
+  }
+  function getDate(id){ return $(id).dataset.value || TODAY; }
+
+  function closeDatePop(){
+    if(DP.pop && DP.pop.parentNode) DP.pop.parentNode.removeChild(DP.pop);
+    if(DP.btn) DP.btn.setAttribute("aria-expanded", "false");
+    DP.pop = null; DP.btn = null; DP.opts = null;
+  }
+
+  function drawDatePop(){
+    var pop = DP.pop, val = DP.btn.dataset.value || TODAY;
+    clear(pop);
+
+    var head = el("div", "cal-head");
+    head.appendChild(el("div", "cal-title", DP.cursor.getFullYear() + "년 " + (DP.cursor.getMonth()+1) + "월"));
+    var nav = el("div", "cal-nav");
+    var prev = el("button", null, "‹"), next = el("button", null, "›");
+    prev.type = next.type = "button";
+    prev.setAttribute("aria-label", "이전 달");
+    next.setAttribute("aria-label", "다음 달");
+    prev.addEventListener("click", function(){ DP.cursor.setMonth(DP.cursor.getMonth()-1); drawDatePop(); });
+    next.addEventListener("click", function(){ DP.cursor.setMonth(DP.cursor.getMonth()+1); drawDatePop(); });
+    nav.appendChild(prev); nav.appendChild(next);
+    head.appendChild(nav);
+    pop.appendChild(head);
+
+    var dow = el("div", "dow-row");
+    ["일","월","화","수","목","금","토"].forEach(function(t, i){
+      dow.appendChild(el("span", i === 0 ? "sun" : null, t));
+    });
+    pop.appendChild(dow);
+
+    var grid = el("div", "cal-grid");
+    var first = new Date(DP.cursor.getFullYear(), DP.cursor.getMonth(), 1);
+    var start = addDays(first, -first.getDay());
+    for(var i = 0; i < 42; i++){
+      var d = addDays(start, i), key = iso(d);
+      var inMonth = d.getMonth() === DP.cursor.getMonth();
+      if(i >= 35 && !inMonth) break;
+      var off = inMonth && DP.opts.disabled && DP.opts.disabled(key);
+      var cell = el("button", "day"
+        + (inMonth ? "" : " out")
+        + (d.getDay() === 0 ? " sun" : "")
+        + (key === TODAY ? " today" : "")
+        + (key === val ? " sel" : "")
+        + (off ? " off" : ""));
+      cell.type = "button";
+      if(!inMonth || off) cell.tabIndex = -1;
+      cell.setAttribute("aria-label", (d.getMonth()+1) + "월 " + d.getDate() + "일");
+      cell.appendChild(el("div", "n", d.getDate()));
+      if(inMonth && !off){
+        (function(k){
+          cell.addEventListener("click", function(){
+            var id = DP.btn.id, cb = DP.opts.onPick;
+            setDate(id, k);
+            closeDatePop();
+            if(cb) cb(k);
+          });
+        })(key);
+      }
+      grid.appendChild(cell);
+    }
+    pop.appendChild(grid);
+
+    var foot = el("div", "datepop-foot");
+    var tb = el("button", null, "오늘");
+    tb.type = "button";
+    tb.addEventListener("click", function(){
+      var id = DP.btn.id, cb = DP.opts.onPick;
+      if(DP.opts.disabled && DP.opts.disabled(TODAY)){
+        DP.cursor = new Date(today().getFullYear(), today().getMonth(), 1);
+        drawDatePop();
+        return;
+      }
+      setDate(id, TODAY);
+      closeDatePop();
+      if(cb) cb(TODAY);
+    });
+    var cb2 = el("button", null, "닫기");
+    cb2.type = "button";
+    cb2.addEventListener("click", closeDatePop);
+    foot.appendChild(tb); foot.appendChild(cb2);
+    pop.appendChild(foot);
+  }
+
+  function placeDatePop(){
+    var r = DP.btn.getBoundingClientRect();
+    var pop = DP.pop;
+    var w = pop.offsetWidth, h = pop.offsetHeight;
+    var left = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
+    var top = r.bottom + 6;
+    if(top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+    pop.style.left = left + "px";
+    pop.style.top = top + "px";
+  }
+
+  function openDatePop(btnId, opts){
+    var btn = $(btnId);
+    if(DP.btn === btn){ closeDatePop(); return; }
+    closeDatePop();
+    DP.btn = btn;
+    DP.opts = opts || {};
+    DP.cursor = new Date(parseISO(btn.dataset.value || TODAY).getFullYear(),
+                         parseISO(btn.dataset.value || TODAY).getMonth(), 1);
+    DP.pop = el("div", "datepop");
+    DP.pop.setAttribute("role", "dialog");
+    document.body.appendChild(DP.pop);
+    drawDatePop();
+    placeDatePop();
+    btn.setAttribute("aria-expanded", "true");
+  }
+
+  document.addEventListener("click", function(e){
+    if(!DP.pop) return;
+    if(DP.pop.contains(e.target) || (DP.btn && DP.btn.contains(e.target))) return;
+    closeDatePop();
+  }, true);
+  window.addEventListener("resize", function(){ if(DP.pop) placeDatePop(); });
+
+  $("f-date").addEventListener("click", function(){ openDatePop("f-date", {}); });
+  $("e-date").addEventListener("click", function(){ openDatePop("e-date", {}); });
+  $("m-date").addEventListener("click", function(){
+    openDatePop("m-date", {
+      // 면담은 평일에만 있습니다.
+      disabled: function(ds){ var w = parseISO(ds).getDay(); return w === 0 || w === 6; }
+    });
+  });
+
   /* ---------------- 시트 ---------------- */
   function openSheet(id){
     $("scrim").classList.add("open");
     $(id).classList.add("open");
   }
   function closeSheets(){
+    closeDatePop();
     $("scrim").classList.remove("open");
     ["sheet-login","sheet-notice","sheet-res","sheet-event","sheet-book","sheet-move","sheet-entry","sheet-roster"]
       .forEach(function(id){ $(id).classList.remove("open"); });
@@ -1866,7 +2039,11 @@ var FIREBASE_CONFIG = {
   Array.prototype.forEach.call(document.querySelectorAll("[data-close]"), function(b){
     b.addEventListener("click", closeSheets);
   });
-  document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeSheets(); });
+  document.addEventListener("keydown", function(e){
+    if(e.key !== "Escape") return;
+    if(DP.pop) closeDatePop();   // 달력이 열려 있으면 달력만 닫습니다
+    else closeSheets();
+  });
   Array.prototype.forEach.call(document.querySelectorAll("[data-go]"), function(b){
     b.addEventListener("click", function(){ switchTab(b.getAttribute("data-go")); });
   });
@@ -2039,7 +2216,7 @@ var FIREBASE_CONFIG = {
     sheetType = ev.type || "perf";
     $("ev-title").textContent = editingEvent ? "일정 수정" : "일정 추가";
     $("f-title").value = ev.title || "";
-    $("f-date").value = ev.date || TODAY;
+    setDate("f-date", ev.date || TODAY);
     $("f-subject").value = ev.subject || "";
     $("f-memo").value = ev.memo || "";
     $("f-delete").hidden = !editingEvent;
@@ -2062,7 +2239,7 @@ var FIREBASE_CONFIG = {
     if(!title){ showErr("ev-err", "제목을 적어 주세요."); $("f-title").focus(); return; }
     var was = editingEvent;
     put("events", was ? was.id : uid(), {
-      type:sheetType, title:title, date:$("f-date").value || TODAY,
+      type:sheetType, title:title, date:getDate("f-date"),
       subject:$("f-subject").value.trim(), memo:$("f-memo").value.trim()
     }, "events").then(function(){
       closeSheets(); toast(was ? "고쳤습니다" : "올렸습니다");
@@ -2136,7 +2313,7 @@ var FIREBASE_CONFIG = {
     moveSlot = c.key;
     var d = State.details[booking.id] || {};
     $("mv-from").textContent = whoLabel(d.klass) + " · 지금은 " + mdText(date) + " " + c.label + " " + c.s + "–" + c.e;
-    $("m-date").value = date;
+    setDate("m-date", date);
     $("mv-err").hidden = true;
     renderMovePicks();
     openSheet("sheet-move");
@@ -2146,7 +2323,7 @@ var FIREBASE_CONFIG = {
     if(!moveFrom) return;
     var err = $("mv-err");
     err.hidden = true;
-    var nd = $("m-date").value;
+    var nd = getDate("m-date");
     if(!nd){ err.textContent = "날짜를 골라 주세요."; err.hidden = false; return; }
     var dw = parseISO(nd).getDay();
     if(dw === 0 || dw === 6){ err.textContent = "주말에는 면담 시간이 없습니다."; err.hidden = false; return; }
@@ -2185,7 +2362,7 @@ var FIREBASE_CONFIG = {
     entryKind = en ? en.kind : "counsel";
     $("en-title").textContent = en ? "기록 수정" : "기록 남기기";
     $("en-who").textContent = (State.roster[State.recSel] || "") + " " + State.recSel;
-    $("e-date").value = en ? en.date : TODAY;
+    setDate("e-date", en ? en.date : TODAY);
     $("e-text").value = en ? en.text : "";
     $("e-delete").hidden = !en;
     $("en-err").hidden = true;
@@ -2200,7 +2377,7 @@ var FIREBASE_CONFIG = {
     var was = editingEntry;
     saveEntry(State.recSel, {
       id: was ? was.id : uid(),
-      date: $("e-date").value || TODAY,
+      date: getDate("e-date"),
       kind: entryKind,
       text: text,
       createdAt: was ? (was.createdAt || Date.now()) : Date.now()
