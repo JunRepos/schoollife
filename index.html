@@ -2668,6 +2668,41 @@ var FIREBASE_CONFIG = {
       total: 700,
       note: "공통과목을 뺀, 성취도와 석차등급이 함께 적히는 상위 10과목. 이수 학점은 반영하지 않습니다. 3학년 1학기까지. 교과 70% · 반영총점 700점 · 기본점수 0점.",
       source: "2028학년도 동국대학교 대학입학전형 시행계획 34~35쪽"
+    },
+    {
+      id: "builtin-sungshin-jiyeok1",
+      builtin: true,
+      name: "성신여대 지역균형Ⅰ (졸업예정자)",
+      mode: "matrix",
+      areas: ["국어", "수학", "영어", "사회(역사/도덕포함)", "과학"],
+      topN: 10,
+      topNSelectOnly: true,      // 공통과목은 전부, 선택과목만 상위 10개
+      requireBoth: true,
+      useCredit: true,
+      // 등급 × 성취도 → 환산점수 (표의 값이 곧 점수)
+      matrix: {
+        1: {A:100.0, B:99.5, C:99.0, D:98.5, E:98.0},
+        2: {A:97.5,  B:97.0, C:96.5, D:96.0, E:95.5},
+        3: {A:95.0,  B:92.5, C:90.0, D:87.5, E:85.0},
+        4: {A:83.0,  B:81.0, C:79.0, D:77.0, E:75.0},
+        5: {A:70.0,  B:65.0, C:60.0, D:55.0, E:50.0}
+      },
+      mult: 0.2, base: 70,
+      note: "지정 4개 교과영역. 공통과목은 전 과목, 선택과목은 상위 10과목. 환산점수 평균 = Σ(이수단위×환산점수)÷Σ이수단위. 교과성적 = 평균×0.2 + 기본점수 70. 사회·과학 융합선택과 석차등급 미표기 과목은 빠집니다. 성취도 분포비율이 기준을 넘으면 0.1% 감점하는 규정은 반영하지 않았습니다.",
+      source: "2028학년도 성신여자대학교 시행계획 17~18쪽"
+    },
+    {
+      id: "builtin-ajou-chucheon",
+      builtin: true,
+      name: "아주대 고교추천",
+      mode: "blend",
+      areas: ["국어", "수학", "영어", "사회(역사/도덕포함)", "과학"],
+      useCredit: true,
+      gradeWeight: 0.8,                                  // 등급 80% + 성취도 20%
+      scale:    {1:100, 2:96, 3:90, 4:80, 5:0},
+      achScale: {A:100, B:96, C:90, D:80, E:0},
+      note: "국·수·영·사·과, 학년별·교과별 가중치 없음. 과목점수 = 이수학점×등급점수×0.8 + 이수학점×성취도점수×0.2. 등급 없는 과목은 빠집니다. 사회·과학 융합선택을 상위 5과목까지 성취도로 반영하는 규정은 아직 넣지 않았습니다.",
+      source: "2028학년도 아주대학교 시행계획 4쪽"
     }
   ];
   function allUnis(){ return BUILTIN_UNIS.concat(State.unis); }
@@ -2686,16 +2721,33 @@ var FIREBASE_CONFIG = {
       if(useCredit && !cr){ out.push({r:r, why:"학점 없음"}); return; }
       if(!useCredit) cr = 1;                       // 이수 학점 미적용 — 과목마다 같은 무게
 
-      // 성취도 × 석차등급 매트릭스로 영역을 정하는 대학 (동국대 방식)
+      // 성취도 × 석차등급 표를 쓰는 대학
+      // zoneScore 가 있으면 표의 값이 '영역 번호', 없으면 곧바로 점수입니다.
       if(uni.mode === "matrix"){
         var row = uni.matrix && uni.matrix[r.rank];
-        var zone = row ? row[r.ach] : null;
-        if(zone == null || !uni.zoneScore || uni.zoneScore[zone] == null){
-          out.push({r:r, why:"영역을 정할 수 없음"});
-          return;
+        var cell = row ? row[r.ach] : null;
+        if(cell == null){ out.push({r:r, why:"등급·성취도 조합이 표에 없음"}); return; }
+        var zone = null, pt0 = cell;
+        if(uni.zoneScore){
+          zone = cell;
+          if(uni.zoneScore[zone] == null){ out.push({r:r, why:"영역 점수 없음"}); return; }
+          pt0 = uni.zoneScore[zone];
         }
-        pool.push({r:r, eff:r.rank, pt:uni.zoneScore[zone], cr:cr, zone:zone,
-                   from:"성취도 " + r.ach + " · " + r.rank + "등급 → " + zone + "영역"});
+        pool.push({r:r, eff:r.rank, pt:pt0, cr:cr, zone:zone, common:isCommonSubject(r.subject),
+                   from:"성취도 " + r.ach + " · " + r.rank + "등급" + (zone ? " → " + zone + "영역" : "")});
+        return;
+      }
+
+      // 등급점수와 성취도점수를 섞는 대학 (아주대: 등급 80% + 성취도 20%)
+      if(uni.mode === "blend"){
+        if(!r.rank){ out.push({r:r, why:"석차등급 없음"}); return; }
+        var gp = uni.scale ? uni.scale[r.rank] : null;
+        var ap = (r.ach && uni.achScale) ? uni.achScale[r.ach] : null;
+        if(gp == null){ out.push({r:r, why:"배점표에 " + r.rank + "등급 값 없음"}); return; }
+        var w = (uni.gradeWeight == null) ? 0.8 : uni.gradeWeight;
+        var mixed = (ap == null) ? gp : gp * w + ap * (1 - w);
+        pool.push({r:r, eff:r.rank, pt:mixed, cr:cr, common:isCommonSubject(r.subject),
+                   from: ap == null ? "석차등급" : "등급 " + Math.round(w*100) + "% + 성취도 " + Math.round((1-w)*100) + "%"});
         return;
       }
 
@@ -2722,14 +2774,23 @@ var FIREBASE_CONFIG = {
     });
 
     // 상위 N과목만 반영 — 배점이 높은 순, 같으면 학점이 큰 순
-    var picked = pool, dropped = [];
-    if(uni.topN > 0 && pool.length > uni.topN){
-      var sorted = pool.slice().sort(function(a, b){
-        return b.pt !== a.pt ? b.pt - a.pt : b.cr - a.cr;
-      });
-      picked = sorted.slice(0, uni.topN);
-      dropped = sorted.slice(uni.topN);
-      dropped.forEach(function(x){ out.push({r:x.r, why:"상위 " + uni.topN + "과목 밖"}); });
+    // topNSelectOnly 면 공통과목은 전부 넣고 선택과목만 상위 N개를 고릅니다 (성신여대 방식)
+    var picked = pool;
+    var byScore = function(a, b){ return b.pt !== a.pt ? b.pt - a.pt : b.cr - a.cr; };
+    if(uni.topN > 0){
+      if(uni.topNSelectOnly){
+        var commons = pool.filter(function(x){ return x.common; });
+        var sels = pool.filter(function(x){ return !x.common; }).sort(byScore);
+        if(sels.length > uni.topN){
+          sels.slice(uni.topN).forEach(function(x){ out.push({r:x.r, why:"선택과목 상위 " + uni.topN + "개 밖"}); });
+          sels = sels.slice(0, uni.topN);
+        }
+        picked = commons.concat(sels);
+      } else if(pool.length > uni.topN){
+        var sorted = pool.slice().sort(byScore);
+        sorted.slice(uni.topN).forEach(function(x){ out.push({r:x.r, why:"상위 " + uni.topN + "과목 밖"}); });
+        picked = sorted.slice(0, uni.topN);
+      }
     }
 
     var s = 0, c = 0;
@@ -2738,10 +2799,13 @@ var FIREBASE_CONFIG = {
     var gs = 0, gc = 0;
     picked.forEach(function(x){ if(x.eff != null){ gs += x.eff * x.cr; gc += x.cr; } });
 
-    // 반영총점이 정해진 대학이면 그 만점으로 환산해 함께 보여 줍니다
+    // 대학이 정한 최종 산출식으로 한 번 더 환산해 함께 보여 줍니다
     var perMax = uni.perSubjectMax || null, totalPts = null;
+    var avg = c ? s / c : null;
     if(uni.total && perMax && uni.topN){
-      totalPts = (s / (perMax * uni.topN)) * uni.total + (uni.base || 0);
+      totalPts = (s / (perMax * uni.topN)) * uni.total + (uni.base || 0);   // 동국대: 과목합을 만점으로
+    } else if(avg != null && (uni.mult != null || uni.base != null)){
+      totalPts = avg * (uni.mult == null ? 1 : uni.mult) + (uni.base || 0); // 성신여대: 평균 × 상수 + 기본점수
     }
 
     return {
