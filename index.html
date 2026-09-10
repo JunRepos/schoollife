@@ -2131,7 +2131,12 @@ var FIREBASE_CONFIG = {
     if(s) t.appendChild(el("div", "s", s));
     return t;
   }
-  function fmt(n, d){ return n == null ? "—" : n.toFixed(d == null ? 2 : d); }
+  function fmt(n, d){ return (n == null || !isFinite(n)) ? "—" : n.toFixed(d == null ? 2 : d); }
+  // 배점처럼 정수일 수도, 소수일 수도 있는 값: 96.80000000000001 → 96.8
+  function num(n){
+    if(n == null || !isFinite(n)) return "—";
+    return String(Math.round(n * 100) / 100);
+  }
 
   // 과목 표 한 덩어리. sub 가 "term" 이면 부제목에 학기를, "area" 면 교과를 씁니다.
   function gradeTable(rs, sub){
@@ -2390,7 +2395,7 @@ var FIREBASE_CONFIG = {
           fill.style.width = Math.max(3, ((pts[i] - lo) / span) * 100) + "%";
           tr.appendChild(fill);
           row.appendChild(tr);
-          row.appendChild(el("div", "vv", String(pts[i])));
+          row.appendChild(el("div", "vv", num(pts[i])));
           bars.appendChild(row);
         });
         card.appendChild(bars);
@@ -2477,8 +2482,10 @@ var FIREBASE_CONFIG = {
     var name = State.roster[sid] || sid;
     var lead = el("p", "srcnote");
     lead.style.margin = "0 0 12px";
-    lead.textContent = name + " · " + res.subjects + "과목 " + res.credit + "학점이 들어가 "
-      + (res.score == null ? "—" : res.score.toFixed(2)) + "점"
+    lead.textContent = name + " · " + res.subjects + "과목"
+      + (res.useCredit ? " " + res.credit + "학점" : "(이 대학은 이수 학점을 계산에 쓰지 않습니다)")
+      + "이 들어가 "
+      + (res.totalPts != null ? res.totalPts.toFixed(1) : (res.score == null ? "—" : res.score.toFixed(2))) + "점"
       + (res.avgRank != null ? " (반영 과목 평균 " + res.avgRank.toFixed(2) + "등급)" : "")
       + (u.topN > 0 ? " · 상위 " + u.topN + "과목만 봅니다" : "");
     sec.appendChild(lead);
@@ -2501,10 +2508,10 @@ var FIREBASE_CONFIG = {
       td0.appendChild(el("div", "area", termLabel(termKey(x.r)) + " · " + x.r.area
         + (x.from !== "석차등급" ? " · " + x.from : "")));
       tr.appendChild(td0);
-      tr.appendChild(el("td", "n", String(x.cr)));
+      tr.appendChild(el("td", "n", x.r.credit == null ? "—" : String(x.r.credit) + (res.useCredit ? "" : " (미적용)")));
       tr.appendChild(el("td", "n rk", x.eff == null ? "—" : String(x.eff) + (x.zone ? " → " + x.zone + "영역" : "")));
-      tr.appendChild(el("td", "n", String(x.pt)));
-      tr.appendChild(el("td", "n", res.credit ? (x.pt * x.cr / res.credit).toFixed(2) : "—"));
+      tr.appendChild(el("td", "n", num(x.pt)));
+      tr.appendChild(el("td", "n", res.weightSum ? (x.pt * x.cr / res.weightSum).toFixed(2) : "—"));
       tb.appendChild(tr);
     });
     tbl.appendChild(tb);
@@ -2706,7 +2713,11 @@ var FIREBASE_CONFIG = {
   function inAreas(r, areas){ return !areas || !areas.length || areas.indexOf(r.area) >= 0; }
 
   function termKey(r){ return r.g + "-" + r.t; }
-  function termLabel(k){ var p = k.split("-"); return p[0] + "학년 " + p[1] + "학기"; }
+  function termLabel(k){
+    var p = String(k).split("-");
+    if(!p[0] || p[0] === "null" || p[0] === "undefined") return "학기 정보 없음";
+    return p[0] + "학년 " + ((p[1] && p[1] !== "null" && p[1] !== "undefined") ? p[1] + "학기" : "");
+  }
   function termsOf(rows){
     var seen = {}, out = [];
     rows.forEach(function(r){ var k = termKey(r); if(!seen[k]){ seen[k] = 1; out.push(k); } });
@@ -3055,6 +3066,8 @@ var FIREBASE_CONFIG = {
       shortBy: (uni.topN && picked.length < uni.topN) ? uni.topN - picked.length : 0,
       avgRank: gc ? gs / gc : null,
       credit: useCredit ? c : 0,
+      weightSum: c,
+      useCredit: useCredit,
       subjects: picked.length,
       used: picked.slice().sort(function(a, b){
         return b.pt !== a.pt ? b.pt - a.pt : (a.r.subject < b.r.subject ? -1 : 1);
