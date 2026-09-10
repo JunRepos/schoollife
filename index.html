@@ -2720,6 +2720,66 @@ var FIREBASE_CONFIG = {
       source: "2028학년도 서강대학교 시행계획 29쪽"
     },
     {
+      id: "builtin-gachon-gyogwa",
+      builtin: true,
+      name: "가천대 학생부교과",
+      mode: "scale",
+      areas: [],
+      useCredit: true,
+      scale: {1:100, 2:99, 3:98, 4:80, 5:30},
+      note: "반영교과 전 과목의 평균(이수단위 적용). 석차등급이 산출된 과목만 반영합니다. 모집단위에 따라 국·수·영 중 5과목을 빼거나, 사회·과학 상위 10과목을 성취도로 보는 경우가 있어 지원 학과를 함께 확인하세요.",
+      source: "2028학년도 가천대학교 시행계획 6~7쪽"
+    },
+    {
+      id: "builtin-seoultech-chucheon",
+      builtin: true,
+      name: "서울과학기술대 고교추천",
+      mode: "scale",
+      areas: [],
+      useCredit: true,
+      scale: {1:1000, 2:990, 3:977, 4:967, 5:0},
+      note: "반영 점수 = Σ(석차등급 점수 × 이수학점) ÷ Σ이수학점. 반영 교과에 해당하는 전 과목을 3학년 1학기까지 반영합니다(졸업예정자). 계열별 반영 교과가 정해져 있고, 고교추천전형은 반영 교과목 80학점 이상을 이수해야 지원할 수 있습니다.",
+      source: "2028학년도 서울과학기술대학교 시행계획 16쪽"
+    },
+    {
+      id: "builtin-swu-gyogwa",
+      builtin: true,
+      name: "서울여대 교과우수자",
+      mode: "scale",
+      areas: ["국어", "수학", "영어", "사회(역사/도덕포함)", "과학"],
+      useCredit: true,
+      scale: {1:100, 2:96, 3:88, 4:50, 5:0},
+      mult: 0.9,
+      note: "국어·수학·영어·사회·과학·한국사 교과별 전 과목. 교과점수 = {Σ(등급점수 × 이수학점) ÷ Σ이수학점} × 0.9. 석차등급이 표기되는 과목만 반영하며, 반영과목 60학점 이상이어야 지원할 수 있습니다.",
+      source: "2028학년도 서울여자대학교 시행계획 21~22쪽"
+    },
+    {
+      id: "builtin-cnu-gyogwa",
+      builtin: true,
+      name: "충남대 학생부교과",
+      mode: "blend",
+      areas: [],
+      useCredit: true,
+      gradeWeight: 1, achWeight: 1,     // 석차등급 점수 + 성취도 점수 (각 50점 만점)
+      scale:    {1:50, 2:40, 3:30, 4:10, 5:0},
+      achScale: {A:50, B:45, C:35, D:15, E:0},
+      note: "산출식 = Σ((석차등급 점수 + 성취도 점수) × 이수단위) ÷ Σ이수단위, 100점 만점. 2028년 2월 졸업예정자는 3학년 1학기까지 반영합니다. 과학탐구실험은 석차등급이 있을 때만 반영합니다.",
+      source: "2028학년도 충남대학교 시행계획 28쪽"
+    },
+    {
+      id: "builtin-kangwon-gyogwa",
+      builtin: true,
+      name: "강원대 학생부교과",
+      mode: "blend",
+      areas: [],
+      useCredit: true,
+      gradeWeight: 1, achWeight: 1,     // 등급 500점 + 성취도 500점 = 1,000점
+      scale:    {1:500, 2:470, 3:430, 4:380, 5:100},
+      achScale: {A:500, B:481, C:461, D:441, E:400},
+      note: "학생부교과 성적 1,000점 = 교과 등급 점수 + 교과 성취도 점수. 각 과목 점수에 학점(단위)을 곱해 합산한 뒤 이수단위 합으로 나눕니다. 2022 개정 교육과정 기준입니다.",
+      source: "2028학년도 강원대학교 시행계획 33쪽"
+    },
+    {
       id: "builtin-ajou-chucheon",
       builtin: true,
       name: "아주대 고교추천",
