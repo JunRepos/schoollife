@@ -279,6 +279,16 @@
     transition:opacity .3s;
   }
 
+  /* 지난 입시 결과 */
+  .ipbox{border-top:1px solid var(--rule-2); padding-top:11px; display:flex; flex-direction:column; gap:7px}
+  .iphead{font-size:12.5px; font-weight:700; color:var(--ink)}
+  .ipwarn{font-size:11.5px; color:var(--muted); line-height:1.55; word-break:keep-all}
+  .ipyear{display:flex; flex-direction:column; gap:3px; padding:8px 10px; background:var(--surface-2); border-radius:9px}
+  .ipyear .t{font-size:12.5px; font-weight:600}
+  .ipyear .s{font-size:12px; color:var(--ink-2); line-height:1.55; word-break:keep-all; font-variant-numeric:tabular-nums}
+  .ipyear .c{font-size:12px; color:var(--t-task); line-height:1.55; word-break:keep-all}
+  .ipyear .tools{margin-top:2px}
+
   /* 성적 */
   .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(112px,1fr)); gap:9px; margin-bottom:16px}
   .tile{background:var(--surface); border:1px solid var(--rule); border-radius:12px; padding:11px 13px 12px}
@@ -1017,6 +1027,7 @@ var FIREBASE_CONFIG = {
 };
 </script>
 <script src="ttdata.js"></script>
+<script src="ipgyeol.js"></script>
 
 <script>
 (function(){
@@ -1146,7 +1157,7 @@ var FIREBASE_CONFIG = {
     cloud:false, teacher:false, user:null, sid:lsGet("a26.sid") || "",
     notices:[], events:[], bookings:[], details:{}, resources:[],
     roster:{}, entries:[], entriesFor:"", recSel:"",
-    grades:{}, unis:[], recMode:"rec", scoreMode:"area"
+    grades:{}, unis:[], recMode:"rec", scoreMode:"area", ipOpen:{}
   };
 
   /* ---------------- 데모(로컬) ---------------- */
@@ -2451,6 +2462,83 @@ var FIREBASE_CONFIG = {
       kvRow("출처", u.source);
       card.appendChild(kv);
 
+      // 지난 입시 결과 (어디가) — 이 대학·전형과 짝이 확인된 표만
+      var ipg = (window.IPGYEOL && window.IPGYEOL[u.id]) || [];
+      if(ipg.length){
+        var ipb = el("div", "ipbox");
+        ipb.appendChild(el("div", "iphead", "지난 입시 결과 · 대입정보포털 어디가"));
+        ipb.appendChild(el("div", "ipwarn",
+          "2024·2025학년도는 9등급제였습니다. 우리 반은 5등급제라 숫자를 곧바로 견줄 수 없어, 아래 비교는 9등급으로 옮긴 추정치로만 보여 드립니다. "
+          + "환산점수도 그 해의 산출식 기준이라 위의 2028 점수와 비교하면 안 됩니다. 2026학년도 결과는 어디가에 아직 표로 올라와 있지 않습니다."));
+        var est9 = res.avgRank != null ? to9(res.avgRank) : null;
+        ipg.slice().sort(function(a, b){ return b.year - a.year; }).forEach(function(gp){
+          var key = u.id + "|" + gp.year + "|" + gp.track;
+          var rowsG = gp.rows || [];
+          var g70 = rowsG.map(function(r){ return r[7]; }).filter(function(v){ return v != null && isFinite(v); }).sort(function(a, b){ return a - b; });
+          var rates = rowsG.map(function(r){ return parseFloat(String(r[2])); }).filter(function(v){ return isFinite(v); }).sort(function(a, b){ return a - b; });
+          var box2 = el("div", "ipyear");
+          box2.appendChild(el("div", "t", gp.year + "학년도 · " + gp.track + " · " + rowsG.length + "개 모집단위"));
+          var parts = [];
+          if(rates.length) parts.push("경쟁률 " + num(rates[0]) + " ~ " + num(rates[rates.length-1]) + " : 1");
+          if(g70.length){
+            var mid = g70[Math.floor((g70.length - 1) / 2)];
+            parts.push("최종등록자 70%컷 " + g70[0].toFixed(2) + " ~ " + g70[g70.length-1].toFixed(2) + "등급 (가운데 " + mid.toFixed(2) + ")");
+          } else {
+            parts.push("학생부 등급은 공개되지 않았습니다");
+          }
+          box2.appendChild(el("div", "s", parts.join(" · ")));
+          if(est9 != null && g70.length){
+            var within = g70.filter(function(v){ return est9 <= v; }).length;
+            box2.appendChild(el("div", "c",
+              "참고: 이 학생의 반영 평균 " + res.avgRank.toFixed(2) + "등급(5등급제)을 9등급으로 옮기면 약 " + est9.toFixed(2)
+              + "등급입니다. 이 값이 70%컷보다 좋은 모집단위는 " + g70.length + "곳 중 " + within + "곳입니다. 추정치이니 참고로만 보세요."));
+          }
+          var tl = el("div", "tools");
+          var open = !!State.ipOpen[key];
+          tl.appendChild(toolBtn(open ? "모집단위별 표 접기" : "모집단위별 표 보기", function(){
+            if(State.ipOpen[key]) delete State.ipOpen[key]; else State.ipOpen[key] = 1;
+            render();
+          }));
+          box2.appendChild(tl);
+          if(open){
+            var hasS = rowsG.some(function(r){ return r[4] != null || r[5] != null; });
+            var wrapT = el("div", "gtbl-wrap");
+            var tblT = el("table", "gtbl");
+            var thT = el("thead"), hrT = el("tr");
+            var cols = ["모집단위", "인원", "경쟁률", "충원", "등급 50%", "등급 70%"];
+            if(hasS) cols = cols.concat(["환산 50%", "환산 70%"]);
+            cols.forEach(function(c, ci){ hrT.appendChild(el("th", ci ? "n" : null, c)); });
+            thT.appendChild(hrT); tblT.appendChild(thT);
+            var tbT = el("tbody");
+            rowsG.forEach(function(r){
+              var tr = el("tr");
+              tr.appendChild(el("td", "sub", r[0] || "—"));
+              tr.appendChild(el("td", "n", r[1] == null ? "—" : num(r[1])));
+              tr.appendChild(el("td", "n", r[2] || "—"));
+              tr.appendChild(el("td", "n", (r[3] && r[3] !== "-") ? r[3] : "—"));
+              tr.appendChild(el("td", "n rk", r[6] == null ? "—" : r[6].toFixed(2)));
+              tr.appendChild(el("td", "n rk", r[7] == null ? "—" : r[7].toFixed(2)));
+              if(hasS){
+                tr.appendChild(el("td", "n", r[4] == null ? "—" : num(r[4])));
+                tr.appendChild(el("td", "n", r[5] == null ? "—" : num(r[5])));
+              }
+              tbT.appendChild(tr);
+            });
+            tblT.appendChild(tbT); wrapT.appendChild(tblT); box2.appendChild(wrapT);
+            if(gp.total != null){
+              var tn = el("div", "ipwarn");
+              tn.textContent = "환산점수 만점(그 해 기준) " + num(gp.total) + "점";
+              box2.appendChild(tn);
+            }
+          }
+          ipb.appendChild(box2);
+        });
+        var srcI = el("div", "ipwarn");
+        srcI.textContent = "출처: 대입정보포털 어디가 · 대학별 ‘전형 평가기준 및 전년도 결과공개’ (2025학년도 결과는 2026학년도 자료, 2024학년도 결과는 2025학년도 자료에 실림)";
+        ipb.appendChild(srcI);
+        card.appendChild(ipb);
+      }
+
       if(u.builtin){
         var vb = el("div", "scale");
         vb.appendChild(el("span", "flag", "시행계획 원문 확인"));
@@ -2813,12 +2901,12 @@ var FIREBASE_CONFIG = {
     {
       id: "builtin-gachon-gyogwa",
       builtin: true,
-      name: "가천대 학생부교과",
+      name: "가천대 학생부우수자",
       mode: "scale",
       areas: [],
       useCredit: true,
       scale: {1:100, 2:99, 3:98, 4:80, 5:30},
-      note: "반영교과 전 과목의 평균(이수단위 적용). 석차등급이 산출된 과목만 반영합니다. 모집단위에 따라 국·수·영 중 5과목을 빼거나, 사회·과학 상위 10과목을 성취도로 보는 경우가 있어 지원 학과를 함께 확인하세요.",
+      note: "학생부우수자·지역의사선발·농어촌(교과)·실기우수자 전형에 공통으로 쓰는 방식입니다. 반영교과 전 과목의 평균(이수단위 적용)이고, 석차등급이 산출된 과목만 반영합니다. 일부 계열은 국·수·영 중 5과목을 빼고 계산합니다. 지역균형 전형은 사회·과학 상위 10과목의 성취도로 보는 다른 방식이라 여기에 포함하지 않았습니다.",
       source: "2028학년도 가천대학교 시행계획 6~7쪽"
     },
     {
