@@ -2860,6 +2860,56 @@ var FIREBASE_CONFIG = {
       source: "2028학년도 강원대학교 시행계획 33쪽"
     },
     {
+      id: "builtin-kyonggi-gyogwa",
+      builtin: true,
+      name: "경기대 수시 (체육특기자 제외 전 전형)",
+      mode: "scale",
+      areas: [],
+      useCredit: true,
+      scale:    {1:100, 2:98, 3:90, 4:60, 5:0},
+      useAch: true,
+      achScale: {A:100, B:98, C:90, D:60, E:0},
+      note: "2028년 국내고교 졸업예정자 기준. 석차등급 1~5와 성취도 A~E가 같은 환산점수를 씁니다. 평균점수 = Σ(과목별 환산점수 × 이수학점) ÷ Σ이수학점. 체육특기자전형은 배점이 달라(100/99.5/99/98.5/0) 따로 봐야 합니다.",
+      source: "2028학년도 경기대학교 시행계획 29쪽 [표1]"
+    },
+    {
+      id: "builtin-syu-gyogwa",
+      builtin: true,
+      name: "삼육대 학생부교과",
+      mode: "scale",
+      areas: [],
+      useCredit: true,
+      scale:    {1:100, 2:99, 3:98, 4:90, 5:70},
+      useAch: true,
+      achScale: {A:100, B:99, C:98, D:90, E:70},
+      note: "2028학년도부터 5등급제 배점을 씁니다. 보통교과·전문교과, 전 학과 적용. 진로선택 과목은 성취도 A~E(I)에 같은 배점을 매깁니다. 약학과는 별도입니다.",
+      source: "2028학년도 삼육대학교 시행계획 3쪽"
+    },
+    {
+      id: "builtin-catholic-gyogwa",
+      builtin: true,
+      name: "가톨릭대 학생부교과",
+      mode: "scale",
+      areas: [],
+      useCredit: true,
+      scale:    {1:100, 2:98, 3:96, 4:85, 5:70},
+      useAch: true,
+      achScale: {A:100, B:98, C:96, D:85, E:70},   // 성취도 A~E를 1~5등급으로 바꿔 같은 배점
+      note: "석차등급은 공통과목·일반선택·전문교과에서 봅니다. 진로선택·융합선택, 과학탐구실험, 체육·예술처럼 석차등급이 없는 과목은 성취도를 등급으로 바꿔(A=1등급 … E=5등급) 같은 배점을 적용합니다.",
+      source: "2028학년도 가톨릭대학교 시행계획 24쪽"
+    },
+    {
+      id: "builtin-kookmin-gyogwa",
+      builtin: true,
+      name: "국민대 학생부교과",
+      mode: "scale",
+      areas: ["국어", "수학", "영어", "사회(역사/도덕포함)", "과학", "기술·가정/정보", "교양"],
+      useCredit: true,
+      scale: {1:100, 2:97, 3:90, 4:70, 5:0},
+      note: "고등학교가 분류한 보통교과 영역을 반영하고, 전문교과와 제2외국어는 반영하지 않습니다. 4등급에서 5등급 사이가 70점에서 0점으로 떨어져 차이가 가장 큽니다.",
+      source: "2028학년도 국민대학교 시행계획 52쪽"
+    },
+    {
       id: "builtin-ajou-chucheon",
       builtin: true,
       name: "아주대 고교추천",
