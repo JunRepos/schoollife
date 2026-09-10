@@ -916,6 +916,17 @@
       <label>반영 교과 — 아무것도 안 고르면 등급이 나오는 전 과목</label>
       <div class="picks" id="u-areas" style="grid-auto-flow:row; grid-template-columns:repeat(3,1fr)"></div>
     </div>
+    <div class="row2">
+      <div class="field">
+        <label for="u-topn">상위 몇 과목만 반영 — 전 과목이면 0</label>
+        <input type="number" id="u-topn" min="0" max="60" step="1" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label for="u-source">출처</label>
+        <input type="text" id="u-source" autocomplete="off">
+      </div>
+    </div>
+    <label class="check-row"><input type="checkbox" id="u-bestof"> 등급과 성취도 중 유리한 쪽으로 (성취도 A는 1등급으로)</label>
     <label class="check-row"><input type="checkbox" id="u-useach"> 등급 없는 과목은 성취도로 반영</label>
     <div class="field" id="u-achwrap" hidden>
       <label>성취도별 환산점수 (A → E)</label>
@@ -928,7 +939,15 @@
       </div>
     </div>
     <div class="field">
-      <label for="u-note">메모 · 출처</label>
+      <label for="u-past">지난 입시 결과 — 한 줄에 하나씩 <b>연도 70%컷 [환산점수]</b></label>
+      <textarea id="u-past" rows="3"></textarea>
+      <div class="srcnote" style="margin-top:6px">
+        예) <code>2026 2.31 96.4</code> — 어디가나 대학 홈페이지의 최종 등록자 70%컷을 옮겨 적으세요.
+        환산점수는 몰라도 됩니다. 2026·2025·2024학년도는 9등급제라 지금 5등급 성적과 곧바로 견줄 수 없습니다.
+      </div>
+    </div>
+    <div class="field">
+      <label for="u-note">메모</label>
       <textarea id="u-note" rows="2"></textarea>
     </div>
     <p class="form-err" id="un-err" hidden></p>
@@ -1246,7 +1265,9 @@ var FIREBASE_CONFIG = {
       State.unis = snap.docs.map(function(d){
         var v = d.data() || {};
         return {id:d.id, name:v.name || "", scale:v.scale || {}, areas:v.areas || [],
-                useAch:!!v.useAch, achScale:v.achScale || {}, note:v.note || ""};
+                useAch:!!v.useAch, achScale:v.achScale || {}, note:v.note || "",
+                topN: v.topN || 0, bestOf: !!v.bestOf, achRank: v.achRank || null,
+                past: Array.isArray(v.past) ? v.past : [], source: v.source || ""};
       }).sort(function(a,b){ return a.name < b.name ? -1 : 1; });
       render();
     }, quiet);
@@ -2294,26 +2315,123 @@ var FIREBASE_CONFIG = {
       });
       card.appendChild(sc);
 
-      var meta = el("div", "meta");
-      meta.textContent = "반영 " + (u.areas.length ? u.areas.length + "개 교과" : "등급 나오는 전 과목")
-        + " · " + res.subjects + "과목 " + res.credit + "학점"
-        + (u.useAch ? " · 성취도 반영" : (res.skipped ? " · 등급 없는 " + res.skipped + "과목 제외" : ""));
-      card.appendChild(meta);
+      var bits = [];
+      bits.push("반영 " + (u.areas.length ? u.areas.join("·").replace(/\(역사\/도덕포함\)/g, "") : "등급 나오는 전 과목"));
+      bits.push(u.topN > 0 ? "상위 " + u.topN + "과목" : "전 과목");
+      bits.push(res.subjects + "과목 " + res.credit + "학점");
+      if(res.avgRank != null) bits.push("반영 평균 " + res.avgRank.toFixed(2) + "등급");
+      if(u.bestOf) bits.push("등급·성취도 중 유리한 쪽");
+      else if(u.useAch) bits.push("성취도 반영");
+      card.appendChild(el("div", "meta", bits.join(" · ")));
+
+      // 지난 3개년 입결과 견주기
+      if(u.past && u.past.length){
+        var pw = el("div", "meta");
+        var lines = u.past.slice().sort(function(a, b){ return (b.year || 0) - (a.year || 0); }).map(function(p){
+          var t = p.year + "학년도";
+          if(p.cut70 != null) t += " 70%컷 " + p.cut70;
+          else if(p.cut50 != null) t += " 50%컷 " + p.cut50;
+          if(p.score70 != null) t += " (환산 " + p.score70 + ")";
+          if(res.avgRank != null && p.cut70 != null){
+            t += res.avgRank <= p.cut70 ? " · 이 학생이 앞섬" : " · 이 학생이 " + (res.avgRank - p.cut70).toFixed(2) + "등급 뒤짐";
+          }
+          return t;
+        });
+        pw.textContent = lines.join("\n");
+        pw.style.whiteSpace = "pre-line";
+        card.appendChild(pw);
+      }
+
       if(u.note) card.appendChild(el("div", "meta", u.note));
+      if(u.source){
+        var srcline = el("div", "meta");
+        srcline.textContent = "출처 " + u.source;
+        card.appendChild(srcline);
+      }
 
       var tools = el("div", "tools");
-      tools.appendChild(toolBtn("수정", function(){ openUni(u); }));
+      tools.appendChild(toolBtn("계산 근거", function(){ showUniWhy(u, res, sid); }));
       tools.appendChild(toolBtn("반 전체 보기", function(){ showUniAll(u); }));
+      tools.appendChild(toolBtn("수정", function(){ openUni(u); }));
       card.appendChild(tools);
       list.appendChild(card);
     });
     box.appendChild(list);
   }
 
+  /* 이 점수가 어떤 과목에서 나왔는지 */
+  function showUniWhy(u, res, sid){
+    var box = $("rec-detail");
+    var sec = el("section");
+    var h = el("div", "sec-head");
+    h.appendChild(el("h2", null, u.name + " · 계산 근거"));
+    var cb = el("button", "link-btn", "닫기");
+    cb.type = "button";
+    cb.addEventListener("click", render);
+    h.appendChild(cb);
+    sec.appendChild(h);
+
+    var name = State.roster[sid] || sid;
+    var lead = el("p", "srcnote");
+    lead.style.margin = "0 0 12px";
+    lead.textContent = name + " · " + res.subjects + "과목 " + res.credit + "학점이 들어가 "
+      + (res.score == null ? "—" : res.score.toFixed(2)) + "점"
+      + (res.avgRank != null ? " (반영 과목 평균 " + res.avgRank.toFixed(2) + "등급)" : "")
+      + (u.topN > 0 ? " · 상위 " + u.topN + "과목만 봅니다" : "");
+    sec.appendChild(lead);
+
+    var wrap = el("div", "gtbl-wrap");
+    var tbl = el("table", "gtbl");
+    var thead = el("thead"), hr = el("tr");
+    ["반영된 과목", "학점", "등급", "배점", "기여"].forEach(function(t, i){
+      var th = el("th", i >= 1 ? "n" : null, t);
+      if(i === 0) th.className = "";
+      hr.appendChild(th);
+    });
+    thead.appendChild(hr);
+    tbl.appendChild(thead);
+    var tb = el("tbody");
+    res.used.forEach(function(x){
+      var tr = el("tr");
+      var td0 = el("td");
+      td0.appendChild(el("div", "sub", x.r.subject));
+      td0.appendChild(el("div", "area", termLabel(termKey(x.r)) + " · " + x.r.area
+        + (x.from !== "석차등급" ? " · " + x.from : "")));
+      tr.appendChild(td0);
+      tr.appendChild(el("td", "n", String(x.cr)));
+      tr.appendChild(el("td", "n rk", x.eff == null ? "—" : String(x.eff)));
+      tr.appendChild(el("td", "n", String(x.pt)));
+      tr.appendChild(el("td", "n", res.credit ? (x.pt * x.cr / res.credit).toFixed(2) : "—"));
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb);
+    wrap.appendChild(tbl);
+    sec.appendChild(wrap);
+
+    if(res.excluded.length){
+      var eh = el("div", "sec-head");
+      eh.style.margin = "16px 0 8px";
+      eh.appendChild(el("h2", null, "빠진 과목"));
+      eh.querySelector("h2").style.fontSize = "13.5px";
+      eh.appendChild(el("span", "sec-note", res.excluded.length + "과목"));
+      sec.appendChild(eh);
+      var ul = el("div");
+      res.excluded.slice().sort(function(a, b){ return a.why < b.why ? -1 : 1; }).forEach(function(x){
+        var line = el("div", "prev-line");
+        line.appendChild(el("span", null, x.r.subject + " (" + x.r.area.replace("(역사/도덕포함)", "") + ")"));
+        line.appendChild(el("b", null, x.why));
+        ul.appendChild(line);
+      });
+      sec.appendChild(ul);
+    }
+    box.appendChild(sec);
+    sec.scrollIntoView({block:"nearest"});
+  }
+
   function showUniAll(u){
     var lines = SIDS.map(function(sid){
       var r = uniScore(gradeRows(sid), u);
-      return {sid: sid, name: State.roster[sid] || sid, score: r.score};
+      return {sid: sid, name: State.roster[sid] || sid, score: r.score, avgRank: r.avgRank};
     }).filter(function(x){ return x.score != null; })
       .sort(function(a, b){ return b.score - a.score; });
     if(!lines.length){ toast("계산할 성적이 없습니다"); return; }
@@ -2329,7 +2447,7 @@ var FIREBASE_CONFIG = {
     lines.forEach(function(x, i){
       var row = el("div", "prev-line");
       row.appendChild(el("span", null, (i+1) + ". " + x.name + " " + x.sid));
-      row.appendChild(el("b", null, x.score.toFixed(2)));
+      row.appendChild(el("b", null, x.score.toFixed(2) + (x.avgRank != null ? "  (" + x.avgRank.toFixed(2) + "등급)" : "")));
       sec.appendChild(row);
     });
     box.appendChild(sec);
@@ -2492,20 +2610,67 @@ var FIREBASE_CONFIG = {
     return out.sort();
   }
 
-  /* 대학 환산 점수: Σ(배점 × 학점) / Σ학점 */
+  /* 대학 환산 점수
+     Σ(배점 × 학점) ÷ Σ학점. 상위 N과목만 보는 대학이면 좋은 쪽부터 N개만 씁니다.
+     어떤 과목이 들어가고 어떤 과목이 왜 빠졌는지 그대로 돌려줍니다. */
+  var ACH_RANK_DEFAULT = {A:1, B:2, C:3, D:4, E:5};
+
   function uniScore(rows, uni){
-    var s = 0, c = 0, used = 0, skipped = 0;
+    var pool = [], out = [];
     rows.forEach(function(r){
-      if(!inAreas(r, uni.areas)) return;
       var cr = r.credit || 0;
-      if(!cr) return;
+      if(!inAreas(r, uni.areas)){ out.push({r:r, why:"반영 교과 아님"}); return; }
+      if(!cr){ out.push({r:r, why:"학점 없음"}); return; }
+
+      var eff = r.rank || null, from = "석차등급";
+      // 등급과 성취도 중 유리한 쪽을 쓰는 대학 (예: 진로선택 성취도 A → 1등급)
+      if(uni.bestOf && r.ach){
+        var ar = (uni.achRank && uni.achRank[r.ach] != null) ? uni.achRank[r.ach] : ACH_RANK_DEFAULT[r.ach];
+        if(ar != null && (eff == null || ar < eff)){
+          if(eff != null) from = "성취도 " + r.ach + " 로 대체";
+          else from = "성취도 " + r.ach;
+          eff = ar;
+        }
+      }
       var pt = null;
-      if(r.rank && uni.scale && uni.scale[r.rank] != null) pt = uni.scale[r.rank];
-      else if(!r.rank && uni.useAch && r.ach && uni.achScale && uni.achScale[r.ach] != null) pt = uni.achScale[r.ach];
-      if(pt == null){ if(!r.rank) skipped++; return; }
-      s += pt * cr; c += cr; used++;
+      if(eff != null && uni.scale && uni.scale[eff] != null) pt = uni.scale[eff];
+      else if(eff == null && uni.useAch && r.ach && uni.achScale && uni.achScale[r.ach] != null){
+        pt = uni.achScale[r.ach]; from = "성취도 " + r.ach;
+      }
+      if(pt == null){
+        out.push({r:r, why: r.rank ? "배점표에 " + r.rank + "등급 값 없음" : "등급 없는 과목"});
+        return;
+      }
+      pool.push({r:r, eff:eff, pt:pt, cr:cr, from:from});
     });
-    return {score: c ? s / c : null, credit: c, subjects: used, skipped: skipped};
+
+    // 상위 N과목만 반영 — 배점이 높은 순, 같으면 학점이 큰 순
+    var picked = pool, dropped = [];
+    if(uni.topN > 0 && pool.length > uni.topN){
+      var sorted = pool.slice().sort(function(a, b){
+        return b.pt !== a.pt ? b.pt - a.pt : b.cr - a.cr;
+      });
+      picked = sorted.slice(0, uni.topN);
+      dropped = sorted.slice(uni.topN);
+      dropped.forEach(function(x){ out.push({r:x.r, why:"상위 " + uni.topN + "과목 밖"}); });
+    }
+
+    var s = 0, c = 0;
+    picked.forEach(function(x){ s += x.pt * x.cr; c += x.cr; });
+    // 반영된 과목만으로 다시 낸 평균 등급 (대학 입결과 비교할 때 쓰는 값)
+    var gs = 0, gc = 0;
+    picked.forEach(function(x){ if(x.eff != null){ gs += x.eff * x.cr; gc += x.cr; } });
+
+    return {
+      score: c ? s / c : null,
+      avgRank: gc ? gs / gc : null,
+      credit: c,
+      subjects: picked.length,
+      used: picked.slice().sort(function(a, b){
+        return b.pt !== a.pt ? b.pt - a.pt : (a.r.subject < b.r.subject ? -1 : 1);
+      }),
+      excluded: out
+    };
   }
 
   /* 나이스 엑셀 파싱 — 브라우저 안에서만 돌아갑니다 */
@@ -3566,6 +3731,13 @@ var FIREBASE_CONFIG = {
     });
     $("u-useach").checked = u ? !!u.useAch : false;
     $("u-achwrap").hidden = !$("u-useach").checked;
+    $("u-bestof").checked = u ? !!u.bestOf : false;
+    $("u-topn").value = (u && u.topN) ? u.topN : 0;
+    $("u-source").value = u ? (u.source || "") : "";
+    $("u-past").value = (u && u.past || []).slice()
+      .sort(function(a,b){ return (b.year||0) - (a.year||0); })
+      .map(function(x){ return [x.year, x.cut70, x.score70].filter(function(v){ return v != null && v !== ""; }).join(" "); })
+      .join(String.fromCharCode(10));
     $("u-note").value = u ? u.note : "";
     $("u-delete").hidden = !u;
     $("un-err").hidden = true;
@@ -3594,8 +3766,27 @@ var FIREBASE_CONFIG = {
         if(isFinite(v)) achScale[a] = v;
       });
     }
+    var past = [], badPast = [];
+    $("u-past").value.split(/\r?\n/).forEach(function(line){
+      var t = line.trim();
+      if(!t) return;
+      var m = t.split(/[\s,]+/);
+      var y = parseInt(m[0], 10);
+      if(!isFinite(y) || y < 2000 || y > 2100){ badPast.push(t); return; }
+      var cut = parseFloat(m[1]), sc70 = parseFloat(m[2]);
+      past.push({year:y, cut70: isFinite(cut) ? cut : null, score70: isFinite(sc70) ? sc70 : null});
+    });
+    if(badPast.length){
+      showErr("un-err", "입시 결과에서 이 줄을 읽지 못했습니다: " + badPast.slice(0,2).join(" / "));
+      return;
+    }
+    var topN = parseInt($("u-topn").value, 10);
     var body = {name:name, scale:scale, areas:uniAreas.slice(),
-                useAch:$("u-useach").checked, achScale:achScale, note:$("u-note").value.trim()};
+                useAch:$("u-useach").checked, achScale:achScale,
+                bestOf:$("u-bestof").checked,
+                topN: (isFinite(topN) && topN > 0) ? topN : 0,
+                past: past, source: $("u-source").value.trim(),
+                note:$("u-note").value.trim()};
     var id = editingUni ? editingUni.id : uid();
     var work;
     if(State.cloud) work = FB.db.collection("unis").doc(id).set(body);
