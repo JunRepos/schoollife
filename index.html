@@ -391,6 +391,42 @@
   }
   @media (max-width:498px){ .fab{right:18px} }
 
+  /* 1인 1역 */
+  .roles-bar{display:flex; gap:7px; flex-wrap:wrap; margin-bottom:12px}
+  .rb{border:1px solid var(--rule); background:var(--surface); color:var(--ink); border-radius:10px; padding:9px 13px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit}
+  .rb.primary{background:var(--ink); color:var(--paper); border-color:var(--ink)}
+  .rb:disabled{opacity:.45; cursor:default}
+  .roles{display:grid; gap:10px}
+  body.wide .roles{grid-template-columns:repeat(auto-fill, minmax(300px, 1fr))}
+  .duty{background:var(--surface); border:1px solid var(--rule); border-radius:12px; padding:12px 13px}
+  .duty.me{border-color:var(--t-task); box-shadow:inset 0 0 0 1px var(--t-task)}
+  .role-top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:10px}
+  .role-name{font-weight:700; font-size:14.5px; line-height:1.4}
+  .role-side{display:flex; align-items:center; gap:11px; flex:0 0 auto; padding-top:2px}
+  .role-cnt{font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap}
+  .role-side button{border:0; background:transparent; padding:0; font-size:12px; font-weight:600; color:var(--t-task); cursor:pointer; font-family:inherit}
+  .role-side button:disabled{color:var(--muted); cursor:default}
+  .seats{display:flex; flex-wrap:wrap; gap:6px}
+  .seat{min-width:60px; border:1px solid var(--rule); background:var(--paper); color:var(--ink); border-radius:9px; padding:7px 11px; font-size:13px; font-weight:600; text-align:center; font-variant-numeric:tabular-nums; font-family:inherit; line-height:1.3}
+  button.seat{cursor:pointer}
+  button.seat:disabled{cursor:default}
+  .seat.empty{border-style:dashed; background:transparent; color:var(--muted); font-weight:500}
+  .seat.me{background:var(--t-task); border-color:var(--t-task); color:#fff}
+  .seat.rolling{border-style:solid; border-color:var(--mark); background:var(--mark-soft); color:var(--ink); font-weight:700}
+  .seat.new{animation:seatPop .55s cubic-bezier(.3,1.5,.5,1)}
+  @keyframes seatPop{0%{transform:scale(.7); background:var(--mark-soft)} 100%{transform:scale(1)}}
+  @media (prefers-reduced-motion:reduce){ .seat.new{animation:none} }
+  .pick-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(92px, 1fr)); gap:7px}
+  .pk{border:1px solid var(--rule); background:var(--surface); color:var(--ink); border-radius:10px; padding:8px 6px; text-align:center; cursor:pointer; font-family:inherit; display:flex; flex-direction:column; gap:1px; min-width:0}
+  .pk b{font-size:14px}
+  .pk .pk-nm{font-size:12px; color:var(--ink-2)}
+  .pk small{font-size:10.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .pk.taken{background:var(--surface-2)}
+  .pk[aria-pressed="true"]{border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink)}
+  .stepper{display:flex; align-items:center; gap:12px}
+  .stepper button{width:42px; height:42px; border-radius:10px; border:1px solid var(--rule); background:var(--surface); color:var(--ink); font-size:20px; cursor:pointer; font-family:inherit}
+  .stepper output{min-width:52px; text-align:center; font-size:17px; font-weight:700; font-variant-numeric:tabular-nums}
+
   /* ── 선생님 데스크톱(넓은 화면) 레이아웃 ── */
   body.wide{padding-left:216px}
   body.wide .app{max-width:1180px; margin:0 auto; min-height:100vh; padding-bottom:56px; box-shadow:none}
@@ -652,6 +688,23 @@
       <section id="meet-mine-sec">
         <div class="sec-head"><h2>내 예약</h2></div>
         <div id="meet-mine"></div>
+      </section>
+    </div>
+
+    <!-- 1인 1역 -->
+    <div id="view-roles" hidden>
+      <section style="border-top:0">
+        <div id="roles-demo"></div>
+        <div id="roles-me"></div>
+        <div class="sec-head">
+          <h2>1인 1역</h2>
+          <span class="sec-note" id="roles-note"></span>
+        </div>
+        <div class="roles-bar" id="roles-bar" hidden></div>
+        <p class="form-err" id="roles-err" hidden style="margin:0 0 12px"></p>
+        <div class="roles" id="roles-list"></div>
+        <div id="roles-left"></div>
+        <p class="hint" id="roles-hint"></p>
       </section>
     </div>
 
@@ -1002,6 +1055,47 @@
   </form>
 </div>
 
+<!-- 1인 1역: 자리 채우기 -->
+<div class="sheet" id="sheet-pick" role="dialog" aria-modal="true" aria-labelledby="pk-title">
+  <div class="grabber"></div>
+  <h2 id="pk-title">자리 채우기</h2>
+  <p class="lead" id="pk-lead"></p>
+  <div class="pick-grid" id="pk-grid"></div>
+  <p class="form-err" id="pk-err" hidden></p>
+  <div class="sheet-actions">
+    <button type="button" class="btn danger" id="pk-remove" hidden>빼기</button>
+    <button type="button" class="btn" data-close>닫기</button>
+    <button type="button" class="btn primary" id="pk-random">랜덤으로 뽑기</button>
+  </div>
+</div>
+
+<!-- 1인 1역: 역할 추가 · 수정 -->
+<div class="sheet" id="sheet-role" role="dialog" aria-modal="true" aria-labelledby="rl-title">
+  <div class="grabber"></div>
+  <h2 id="rl-title">역할 추가</h2>
+  <p class="lead">역할 이름과 몇 명이 맡을지 정합니다.</p>
+  <form id="rl-form">
+    <div class="field">
+      <label for="rl-name">역할 이름</label>
+      <input type="text" id="rl-name" maxlength="40" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>인원</label>
+      <div class="stepper">
+        <button type="button" id="rl-minus" aria-label="한 명 줄이기">−</button>
+        <output id="rl-count">1명</output>
+        <button type="button" id="rl-plus" aria-label="한 명 늘리기">＋</button>
+      </div>
+    </div>
+    <p class="form-err" id="rl-err" hidden></p>
+    <div class="sheet-actions">
+      <button type="button" class="btn danger" id="rl-delete" hidden>삭제</button>
+      <button type="button" class="btn" data-close>취소</button>
+      <button type="submit" class="btn primary">저장</button>
+    </div>
+  </form>
+</div>
+
 <!-- 사진 크게 보기 -->
 <div class="imgview" id="imgview" role="dialog" aria-modal="true" aria-label="사진 크게 보기">
   <img id="iv-img" alt="">
@@ -1157,7 +1251,8 @@ var FIREBASE_CONFIG = {
     cloud:false, teacher:false, user:null, sid:lsGet("a26.sid") || "",
     notices:[], events:[], bookings:[], details:{}, resources:[],
     roster:{}, entries:[], entriesFor:"", recSel:"",
-    grades:{}, unis:[], recMode:"rec", scoreMode:"area", ipOpen:{}
+    grades:{}, unis:[], recMode:"rec", scoreMode:"area", ipOpen:{},
+    roles:null, rolesErr:""
   };
 
   /* ---------------- 데모(로컬) ---------------- */
@@ -1171,6 +1266,8 @@ var FIREBASE_CONFIG = {
       State.roster = lsGet("a26.roster") || {};
       State.grades = lsGet("a26.grades") || {};
       State.unis = lsGet("a26.unis") || [];
+      var lr = lsGet("a26.roles");
+      State.roles = lr ? normRoles(lr) : null;
       State.teacher = !!lsGet("a26.teacherMode");
     },
     save:function(){
@@ -1255,6 +1352,12 @@ var FIREBASE_CONFIG = {
                     photos: Array.isArray(v.photos) ? v.photos : [],
                     createdAt:v.createdAt||0, updatedAt:v.updatedAt||0};
           });
+          render();
+        }, quiet);
+
+        // 1인 1역 — 문서가 아직 없으면 기본 배정(DEFAULT_ROLES)을 보여 줍니다.
+        FB.db.collection("roles").doc("current").onSnapshot(function(doc){
+          State.roles = doc.exists ? normRoles((doc.data() || {}).list) : null;
           render();
         }, quiet);
 
@@ -2664,6 +2767,8 @@ var FIREBASE_CONFIG = {
      icon:'<rect x="3.5" y="5" width="15" height="13.5" rx="2"/><path d="M3.5 9h15M7.5 3.5v3M14.5 3.5v3"/>'},
     {id:"meet", label:"면담", title:"면담 예약", eyebrow:"면담", view:"view-meet",
      icon:'<circle cx="11" cy="8" r="3.2"/><path d="M4.8 18.2c0-3.1 2.8-5.2 6.2-5.2s6.2 2.1 6.2 5.2"/>'},
+    {id:"roles", label:"1인1역", title:"1인 1역", eyebrow:"1인 1역", view:"view-roles",
+     icon:'<rect x="4" y="3.5" width="14" height="15" rx="2"/><path d="M7.3 8.2l1.3 1.3 2.4-2.4M7.3 13.7l1.3 1.3 2.4-2.4M13.4 8.6h1.8M13.4 14.1h1.8"/>'},
     {id:"rec", label:"학생 기록", title:"학생 기록", eyebrow:"학생 기록", view:"view-rec", teacher:true,
      icon:'<path d="M6 3.5h9A1.5 1.5 0 0 1 16.5 5v13.5H6A1.5 1.5 0 0 1 4.5 17V5A1.5 1.5 0 0 1 6 3.5z"/><path d="M8 7.5h5M8 11h5M8 14.5h3"/>'}
   ];
@@ -2716,6 +2821,8 @@ var FIREBASE_CONFIG = {
         label = "전달사항 쓰기"; action = function(){ openNotice(null); };
       } else if(activeTab === "notice" && noticeMode === "res"){
         label = "자료 올리기"; action = function(){ openRes(null); };
+      } else if(activeTab === "roles"){
+        label = "역할 추가"; action = function(){ openRole(null); };
       } else if(activeTab === "rec" && State.recSel){
         label = "기록 남기기"; action = function(){ openEntry(null); };
       }
@@ -3532,7 +3639,7 @@ var FIREBASE_CONFIG = {
   function closeSheets(){
     closeDatePop();
     $("scrim").classList.remove("open");
-    ["sheet-login","sheet-notice","sheet-res","sheet-event","sheet-book","sheet-move","sheet-entry","sheet-roster","sheet-import","sheet-uni"]
+    ["sheet-login","sheet-notice","sheet-res","sheet-event","sheet-book","sheet-move","sheet-entry","sheet-roster","sheet-import","sheet-uni","sheet-pick","sheet-role"]
       .forEach(function(id){ $(id).classList.remove("open"); });
   }
   $("scrim").addEventListener("click", closeSheets);
@@ -4348,6 +4455,397 @@ var FIREBASE_CONFIG = {
     })["catch"](function(err){ showErr("ro-err", saveErrText(err)); });
   });
 
+  /* ================= 1인 1역 =================
+     공개 문서(roles/current)에는 학번만 담습니다.
+     이름은 선생님 화면에서 명단(students)으로만 붙입니다. */
+  var DEFAULT_ROLES = [
+    {id:"board",   name:"칠판 지우기 + 칠판 지우개 빨기", count:3, members:["20621"]},
+    {id:"dday",    name:"시험 및 주요 일자 D-Day 관리",   count:1, members:[]},
+    {id:"perf",    name:"수행평가 관리",                  count:1, members:[]},
+    {id:"notice",  name:"게시판 관리",                    count:2, members:[]},
+    {id:"phone",   name:"핸드폰 관리",                    count:3, members:["20604","20610"]},
+    {id:"media",   name:"멀티미디어 관리",                count:1, members:["20611"]},
+    {id:"meal",    name:"급식 도우미",                    count:3, members:["20601","20613","20617"]},
+    {id:"recycle", name:"분리수거",                       count:3, members:["20605","20609","20612"]},
+    {id:"clean",   name:"청소 상태 관리",                 count:3, members:["20620"]}
+  ];
+  var ROLE_MAX = 10;
+  var rolesUndo = null, rolesBusy = false, rolesFresh = {};
+
+  function copyRoles(list){
+    return list.map(function(r){ return {id:r.id, name:r.name, count:r.count, members:r.members.slice()}; });
+  }
+  // 저장된 값이 어긋나 있어도(없는 학번, 두 역할에 겹친 학생, 인원 초과) 바로잡아 읽습니다.
+  function normRoles(list){
+    var seen = {};
+    return (Array.isArray(list) ? list : []).filter(function(r){ return r && r.name; }).map(function(r){
+      var count = Math.max(1, Math.min(ROLE_MAX, parseInt(r.count, 10) || 1));
+      var members = (Array.isArray(r.members) ? r.members : []).filter(function(s){
+        if(!STUDENT_TT[s] || seen[s]) return false;
+        seen[s] = 1; return true;
+      }).slice(0, count);
+      return {id:String(r.id || uid()), name:String(r.name).slice(0, 40), count:count, members:members};
+    });
+  }
+  function roleList(){ return State.roles ? State.roles : copyRoles(DEFAULT_ROLES); }
+  function findRole(list, id){
+    for(var i = 0; i < list.length; i++) if(list[i].id === id) return list[i];
+    return null;
+  }
+  function roleOf(list, sid){
+    for(var i = 0; i < list.length; i++) if(list[i].members.indexOf(sid) >= 0) return list[i];
+    return null;
+  }
+  function freeStudents(list){ return SIDS.filter(function(s){ return !roleOf(list, s); }); }
+  function noLabel(sid){ return parseInt(sid.slice(3), 10) + "번"; }
+  // 학생 화면에는 번호만, 선생님 화면에는 명단이 있으면 이름까지
+  function seatLabel(sid){
+    var nm = State.teacher ? State.roster[sid] : "";
+    return nm ? noLabel(sid) + " " + nm : noLabel(sid);
+  }
+  function randInt(n){
+    if(window.crypto && crypto.getRandomValues){
+      var a = new Uint32Array(1);
+      crypto.getRandomValues(a);
+      return a[0] % n;
+    }
+    return Math.floor(Math.random() * n);
+  }
+  function shuffle(arr){
+    var a = arr.slice();
+    for(var i = a.length - 1; i > 0; i--){
+      var j = randInt(i + 1), t = a[i];
+      a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  function rolesErrText(e){
+    if(e && e.code === "permission-denied" && State.teacher){
+      var who = (State.user && State.user.email) || "(로그인 정보 없음)";
+      return "저장하지 못했습니다. Firestore 규칙에 1인 1역(roles) 부분을 넣어 다시 게시해 주세요.\n로그인한 계정: " + who;
+    }
+    return saveErrText(e);
+  }
+  // 저장하고 true/false 로 알려 줍니다. undoFrom 을 주면 ‘되돌리기’가 그 상태로 돌아갑니다.
+  function saveRoles(list, undoFrom){
+    var prev = State.roles;
+    rolesUndo = undoFrom || null;
+    State.rolesErr = "";
+    State.roles = list;
+    render();
+    if(!State.cloud){ lsSet("a26.roles", list); return Promise.resolve(true); }
+    return FB.db.collection("roles").doc("current").set({list:list, updatedAt:Date.now()})
+      .then(function(){ return true; })
+      ["catch"](function(e){
+        State.roles = prev;
+        rolesUndo = null;
+        State.rolesErr = rolesErrText(e);
+        render();
+        return false;
+      });
+  }
+
+  function renderRoles(){
+    fillDemo("roles-demo");
+    var list = roleList(), T = State.teacher;
+    var seats = 0, filled = 0;
+    list.forEach(function(r){ seats += r.count; filled += r.members.length; });
+    var free = freeStudents(list);
+    $("roles-note").textContent = "자리 " + seats + " · 빈 자리 " + (seats - filled);
+
+    var err = $("roles-err");
+    err.textContent = State.rolesErr || "";
+    err.style.whiteSpace = "pre-wrap";
+    err.hidden = !State.rolesErr;
+
+    // 학생: 내 역할
+    var me = $("roles-me");
+    clear(me);
+    if(!T){
+      var b = el("div", "demo-note");
+      if(State.sid){
+        var mine = roleOf(list, State.sid);
+        b.appendChild(el("b", null, "내 역할"));
+        b.appendChild(el("span", null, mine ? mine.name : "아직 정해지지 않았어요"));
+      } else {
+        b.appendChild(el("b", null, "안내"));
+        var sp = el("span", null, "학번을 넣으면 내 역할이 표시됩니다. ");
+        var lk = el("button", "link-btn", "학번 넣기");
+        lk.type = "button";
+        lk.addEventListener("click", function(){ openLogin("student"); });
+        sp.appendChild(lk);
+        b.appendChild(sp);
+      }
+      me.appendChild(b);
+    }
+
+    // 선생님 도구
+    var bar = $("roles-bar");
+    clear(bar);
+    bar.hidden = !T;
+    if(T){
+      var draw = el("button", "rb primary", "빈 자리 모두 뽑기");
+      draw.type = "button";
+      draw.disabled = rolesBusy || filled >= seats || !free.length;
+      draw.addEventListener("click", function(){ drawRoles(null); });
+      bar.appendChild(draw);
+      if(rolesUndo){
+        var ub = el("button", "rb", "되돌리기");
+        ub.type = "button";
+        ub.disabled = rolesBusy;
+        ub.addEventListener("click", function(){
+          saveRoles(rolesUndo, null).then(function(ok){ if(ok) toast("되돌렸습니다"); });
+        });
+        bar.appendChild(ub);
+      }
+      var cb = el("button", "rb", "전체 비우기");
+      cb.type = "button";
+      cb.disabled = rolesBusy || !filled;
+      cb.addEventListener("click", function(){
+        if(!window.confirm("모든 역할에서 학생을 빼고 빈 자리로 만들까요?\n바로 뒤에 ‘되돌리기’로 되살릴 수 있어요.")) return;
+        var next = copyRoles(list);
+        next.forEach(function(r){ r.members = []; });
+        saveRoles(next, copyRoles(list)).then(function(ok){ if(ok) toast("모두 비웠습니다"); });
+      });
+      bar.appendChild(cb);
+    }
+
+    var box = $("roles-list");
+    clear(box);
+    if(!list.length) box.appendChild(emptyBox("아직 역할이 없어요", T ? "‘역할 추가’로 만들어 보세요" : ""));
+    list.forEach(function(r){
+      var isMine = !T && State.sid && r.members.indexOf(State.sid) >= 0;
+      var card = el("div", "duty" + (isMine ? " me" : ""));
+      var top = el("div", "role-top");
+      top.appendChild(el("div", "role-name", r.name));
+      var side = el("div", "role-side");
+      side.appendChild(el("span", "role-cnt", r.members.length + " / " + r.count + "명"));
+      if(T){
+        if(r.members.length < r.count){
+          var db = el("button", null, "뽑기");
+          db.type = "button";
+          db.disabled = rolesBusy || !free.length;
+          db.addEventListener("click", function(){ drawRoles(r.id); });
+          side.appendChild(db);
+        }
+        var eb = el("button", null, "수정");
+        eb.type = "button";
+        eb.disabled = rolesBusy;
+        eb.addEventListener("click", function(){ openRole(r); });
+        side.appendChild(eb);
+      }
+      top.appendChild(side);
+      card.appendChild(top);
+
+      var row = el("div", "seats");
+      for(var i = 0; i < r.count; i++){
+        var sid = r.members[i];
+        var s = T ? el("button", "seat") : el("span", "seat");
+        if(T){ s.type = "button"; s.disabled = rolesBusy; }
+        if(sid){
+          s.textContent = seatLabel(sid);
+          if(!T && sid === State.sid) s.classList.add("me");
+          if(rolesFresh[r.id + ":" + sid]) s.classList.add("new");
+        } else {
+          s.classList.add("empty");
+          s.textContent = "빈 자리";
+          s.setAttribute("data-roll", r.id);
+        }
+        if(T) (function(idx){ s.addEventListener("click", function(){ openPick(r.id, idx); }); })(i);
+        row.appendChild(s);
+      }
+      card.appendChild(row);
+      box.appendChild(card);
+    });
+    rolesFresh = {};   // 새로 뽑힌 자리 반짝임은 한 번만
+
+    // 선생님: 아직 역할 없는 학생
+    var lb = $("roles-left");
+    clear(lb);
+    if(T){
+      var h = el("div", "sec-head");
+      h.style.marginTop = "20px";
+      h.appendChild(el("h2", null, "아직 역할이 없는 학생"));
+      h.appendChild(el("span", "sec-note", free.length + "명"));
+      lb.appendChild(h);
+      if(!free.length) lb.appendChild(el("p", "hint", "모든 학생이 역할을 맡았어요."));
+      else {
+        var pool = el("div", "seats");
+        free.forEach(function(s){ pool.appendChild(el("span", "seat", seatLabel(s))); });
+        lb.appendChild(pool);
+      }
+    }
+
+    $("roles-hint").textContent = T
+      ? "빈 자리를 누르면 학생을 직접 고르거나 랜덤으로 뽑을 수 있고, 들어가 있는 학생을 누르면 바꾸거나 뺄 수 있습니다. 뽑기는 아직 역할이 없는 학생 중에서만 고릅니다. 학생 화면에는 번호만 보이고 이름은 보이지 않습니다."
+      : "역할은 선생님이 정합니다. 바꾸고 싶으면 선생님께 말씀드려 주세요.";
+  }
+
+  // 빈 자리를 역할 없는 학생 중에서 랜덤으로 채웁니다. roleId 가 있으면 그 역할만.
+  function drawRoles(roleId){
+    if(rolesBusy) return;
+    var list = roleList();
+    var next = copyRoles(list);
+    var free = freeStudents(list);
+    var pool = shuffle(free);
+    var fresh = {}, got = 0, short = 0;
+    next.forEach(function(r){
+      if(roleId && r.id !== roleId) return;
+      var need = r.count - r.members.length;
+      for(var k = 0; k < need; k++){
+        if(!pool.length){ short += need - k; break; }
+        var s = pool.pop();
+        r.members.push(s);
+        fresh[r.id + ":" + s] = 1;
+        got++;
+      }
+    });
+    if(!got){ toast(free.length ? "빈 자리가 없어요" : "역할이 없는 학생이 남아 있지 않아요"); return; }
+
+    // 1초쯤 번호가 돌아가다가 멈추는 연출
+    rolesBusy = true;
+    Array.prototype.forEach.call(document.querySelectorAll("#roles-bar button, #roles-list button"), function(b){ b.disabled = true; });
+    var cells = Array.prototype.filter.call(document.querySelectorAll("#roles-list [data-roll]"), function(n){
+      return !roleId || n.getAttribute("data-roll") === roleId;
+    });
+    cells.forEach(function(c){ c.classList.add("rolling"); });
+    var tick = setInterval(function(){
+      cells.forEach(function(c){ c.textContent = seatLabel(free[randInt(free.length)]); });
+    }, 70);
+    setTimeout(function(){
+      clearInterval(tick);
+      rolesBusy = false;
+      rolesFresh = fresh;
+      saveRoles(next, copyRoles(list)).then(function(ok){
+        if(ok) toast(short ? got + "자리를 뽑았어요. 학생이 모자라 " + short + "자리는 비어 있어요" : got + "자리를 뽑았어요");
+      });
+    }, 1200);
+  }
+
+  /* 자리 채우기 시트 */
+  var pickCtx = null;
+  function openPick(roleId, idx){
+    var list = roleList();
+    var r = findRole(list, roleId);
+    if(!r) return;
+    pickCtx = {roleId:roleId, idx:idx};
+    var cur = r.members[idx] || "";
+    $("pk-title").textContent = r.name;
+    $("pk-lead").textContent = cur
+      ? seatLabel(cur) + " 자리입니다. 다른 학생을 누르면 바뀝니다."
+      : "빈 자리에 넣을 학생을 누르세요. 다른 역할을 맡은 학생을 고르면 이쪽으로 옮겨집니다.";
+    $("pk-remove").hidden = !cur;
+    $("pk-random").textContent = cur ? "랜덤으로 바꾸기" : "랜덤으로 뽑기";
+    $("pk-err").hidden = true;
+    var grid = $("pk-grid");
+    clear(grid);
+    SIDS.forEach(function(s){
+      var other = roleOf(list, s);
+      var b = el("button", "pk" + (other ? " taken" : ""));
+      b.type = "button";
+      if(s === cur) b.setAttribute("aria-pressed", "true");
+      b.appendChild(el("b", null, noLabel(s)));
+      if(State.roster[s]) b.appendChild(el("span", "pk-nm", State.roster[s]));
+      b.appendChild(el("small", null, other ? other.name : "역할 없음"));
+      b.addEventListener("click", function(){ assignSeat(s, null); });
+      grid.appendChild(b);
+    });
+    openSheet("sheet-pick");
+  }
+  function assignSeat(sid, msg){
+    if(!pickCtx) return;
+    var next = copyRoles(roleList());
+    var r = findRole(next, pickCtx.roleId);
+    if(!r) return;
+    var cur = r.members[pickCtx.idx];
+    if(sid === cur){ closeSheets(); return; }
+    if(r.members.indexOf(sid) >= 0){ showErr("pk-err", noLabel(sid) + "은 이미 이 역할이에요."); return; }
+    var from = roleOf(next, sid);
+    if(from) from.members.splice(from.members.indexOf(sid), 1);
+    if(cur) r.members[pickCtx.idx] = sid; else r.members.push(sid);
+    saveRoles(next, null).then(function(ok){
+      if(!ok){ showErr("pk-err", State.rolesErr); return; }
+      closeSheets();
+      toast(msg || (from ? noLabel(sid) + "을 ‘" + from.name + "’에서 옮겼어요" : noLabel(sid) + "을 넣었어요"));
+    });
+  }
+  $("pk-random").addEventListener("click", function(){
+    var free = freeStudents(roleList());
+    if(!free.length){ showErr("pk-err", "역할이 없는 학생이 남아 있지 않아요."); return; }
+    var s = free[randInt(free.length)];
+    assignSeat(s, noLabel(s) + "이 뽑혔어요");
+  });
+  $("pk-remove").addEventListener("click", function(){
+    if(!pickCtx) return;
+    var next = copyRoles(roleList());
+    var r = findRole(next, pickCtx.roleId);
+    if(!r || !r.members[pickCtx.idx]) return;
+    var out = r.members.splice(pickCtx.idx, 1)[0];
+    saveRoles(next, null).then(function(ok){
+      if(!ok){ showErr("pk-err", State.rolesErr); return; }
+      closeSheets();
+      toast(noLabel(out) + "을 뺐어요");
+    });
+  });
+
+  /* 역할 추가 · 수정 시트 */
+  var editingRole = null, roleCount = 1;
+  function showRoleCount(){ $("rl-count").textContent = roleCount + "명"; }
+  function openRole(r){
+    editingRole = r;
+    $("rl-title").textContent = r ? "역할 수정" : "역할 추가";
+    $("rl-name").value = r ? r.name : "";
+    roleCount = r ? r.count : 1;
+    showRoleCount();
+    $("rl-delete").hidden = !r;
+    $("rl-err").hidden = true;
+    openSheet("sheet-role");
+    if(!r) setTimeout(function(){ $("rl-name").focus(); }, 280);
+  }
+  $("rl-minus").addEventListener("click", function(){ roleCount = Math.max(1, roleCount - 1); showRoleCount(); });
+  $("rl-plus").addEventListener("click", function(){ roleCount = Math.min(ROLE_MAX, roleCount + 1); showRoleCount(); });
+  $("rl-form").addEventListener("submit", function(e){
+    e.preventDefault();
+    $("rl-err").hidden = true;
+    var name = $("rl-name").value.trim();
+    if(!name){ showErr("rl-err", "역할 이름을 적어 주세요."); $("rl-name").focus(); return; }
+    var next = copyRoles(roleList());
+    if(editingRole){
+      var r = findRole(next, editingRole.id);
+      if(!r){ closeSheets(); return; }
+      if(roleCount < r.members.length){
+        var cut = r.members.slice(roleCount);
+        if(!window.confirm("지금 " + r.members.length + "명이 맡고 있어서 " +
+            cut.map(noLabel).join(", ") + "은 이 역할에서 빠집니다. 괜찮을까요?")) return;
+        r.members = r.members.slice(0, roleCount);
+      }
+      r.name = name;
+      r.count = roleCount;
+    } else {
+      next.push({id:uid(), name:name, count:roleCount, members:[]});
+    }
+    var was = editingRole;
+    saveRoles(next, null).then(function(ok){
+      if(!ok){ showErr("rl-err", State.rolesErr); return; }
+      closeSheets();
+      toast(was ? "고쳤습니다" : "추가했습니다");
+    });
+  });
+  $("rl-delete").addEventListener("click", function(){
+    if(!editingRole) return;
+    var n = editingRole.members.length;
+    if(!window.confirm("‘" + editingRole.name + "’ 역할을 지울까요?" +
+        (n ? "\n맡고 있던 " + n + "명은 ‘역할 없음’으로 돌아갑니다." : ""))) return;
+    var id = editingRole.id;
+    var next = copyRoles(roleList()).filter(function(r){ return r.id !== id; });
+    saveRoles(next, null).then(function(ok){
+      if(!ok){ showErr("rl-err", State.rolesErr); return; }
+      closeSheets();
+      toast("지웠습니다");
+    });
+  });
+
   /* ---------------- 기타 ---------------- */
   Array.prototype.forEach.call($("plan-seg").children, function(b){
     b.addEventListener("click", function(){ planMode = b.getAttribute("data-mode"); renderPlan(); renderFab(); });
@@ -4377,6 +4875,7 @@ var FIREBASE_CONFIG = {
     else if(activeTab === "tt") renderTT();
     else if(activeTab === "plan") renderPlan();
     else if(activeTab === "meet") renderMeet();
+    else if(activeTab === "roles") renderRoles();
     else if(activeTab === "rec") renderRec();
   }
 
@@ -4386,7 +4885,7 @@ var FIREBASE_CONFIG = {
   switchTab("home");
 
   if(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId){
-    State.notices = []; State.events = []; State.bookings = []; State.resources = []; State.roster = {};
+    State.notices = []; State.events = []; State.bookings = []; State.resources = []; State.roster = {}; State.roles = null;
     State.teacher = false;
     applyWide(); render();
     initCloud()["catch"](function(e){

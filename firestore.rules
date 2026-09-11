@@ -4,7 +4,8 @@ rules_version = '2';
 // TEACHER_EMAIL 자리에 선생님 계정 이메일을 넣어야 합니다.
 //
 // 요약
-//   전달사항 · 자료실 · 학급 일정 → 누구나 읽기, 선생님만 쓰기
+//   전달사항 · 자료실 · 1인 1역    → 누구나 읽기, 선생님만 쓰기
+//   학급 일정                      → 누구나 읽기·쓰기, 지우기는 선생님만
 //   면담 예약(자리 참/빔)          → 누구나 읽기, 누구나 신청, 중복은 서버가 거부
 //   신청자 이름 · 면담 내용        → 선생님만 읽기
 //   학생 명단 · 누가기록           → 선생님만 읽고 쓰기 (가장 민감한 자료)
@@ -44,6 +45,13 @@ service cloud.firestore {
         && (!('subject' in request.resource.data) || request.resource.data.subject.size() <= 30)
         && (!('by' in request.resource.data) || request.resource.data.by.size() <= 20);
       allow delete: if isTeacher();
+    }
+
+    // ── 1인 1역: 누구나 읽기, 선생님만 쓰기 ──────────────────────
+    // 학번만 담고 이름은 담지 않습니다.
+    match /roles/{id} {
+      allow read: if true;
+      allow write: if isTeacher();
     }
 
     // ── 면담 예약: 자리가 찼는지 여부만 공개 ──────────────────────
