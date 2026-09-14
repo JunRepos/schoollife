@@ -168,6 +168,11 @@
   .day .n{font-size:13px; font-weight:500; color:var(--ink-2); width:22px; height:22px; display:grid; place-items:center}
   .day.sun .n, .day.sat .n, .day.hol .n{color:var(--t-exam)}
   .dow-row span.sat{color:var(--t-exam)}
+  /* 학사일정 · 창체 */
+  .ev.builtin{cursor:default}
+  .ev-meta .tag.sch{background:var(--surface-2); color:var(--ink-2)}
+  .cc-note{font-size:12.5px; color:var(--ink-2); background:var(--surface-2); border-radius:9px; padding:9px 11px; margin-bottom:10px; line-height:1.5}
+  .cell.cc{background:var(--mark-soft); color:var(--ink-2); font-weight:600}
   .day.out{visibility:hidden}
   .day.today .n{background:var(--ink); color:var(--paper); border-radius:50%; font-weight:600}
   .day[aria-selected="true"]{background:var(--surface-2); box-shadow:inset 0 0 0 1.5px var(--ink)}
@@ -1182,6 +1187,7 @@ var FIREBASE_CONFIG = {
     "2026-02-16":"설날 연휴", "2026-02-17":"설날", "2026-02-18":"설날 연휴",
     "2026-03-01":"삼일절", "2026-03-02":"대체공휴일(삼일절)",
     "2026-05-01":"노동절",
+    "2026-05-04":"재량휴업일",
     "2026-05-05":"어린이날",
     "2026-05-24":"부처님오신날", "2026-05-25":"대체공휴일(부처님오신날)",
     "2026-06-03":"지방선거일",
@@ -1191,9 +1197,71 @@ var FIREBASE_CONFIG = {
     "2026-09-24":"추석 연휴", "2026-09-25":"추석", "2026-09-26":"추석 연휴",
     "2026-10-03":"개천절", "2026-10-05":"대체공휴일(개천절)",
     "2026-10-09":"한글날",
+    "2026-11-20":"재량휴업일",
     "2026-12-25":"성탄절"
   };
   function holidayOf(key){ return HOLIDAYS[key] || ""; }
+
+  /* 2026학년도 창의적 체험활동 운영계획(2학기 변경) — 2학년에 해당하는 것만.
+     수요일 5·6교시가 창체이고, 날짜마다 내용이 정해져 있습니다.
+     "@fri" 는 그 교시에 금요일 같은 교시 수업을 한다는 뜻입니다.
+     all/upto 는 1교시부터 upto 교시까지 하루 행사입니다. */
+  var CC_PLAN = {
+    "2026-08-19": {5:"가정폭력 예방교육", 6:"교내환경정화활동"},
+    "2026-08-26": {5:"정보통신윤리교육", 6:"2학기 학급회 조직·학급자치회의"},
+    "2026-09-02": {5:"@thu", 6:"@thu"},
+    "2026-09-09": {5:"사이버폭력·학생 도박 예방교육", 6:"학급자치(학급특색활동)"},
+    "2026-09-16": {5:"동아리 활동", 6:"동아리 활동"},
+    "2026-09-23": {5:"수업 없음", 6:"수업 없음"},
+    "2026-09-30": {5:"성매매 예방교육", 6:"학급자치(학급특색활동)"},
+    "2026-10-07": {5:"@fri", 6:"@fri"},
+    "2026-10-21": {5:"흡연예방·약물오남용 교육", 6:"생명존중·자살예방교육"},
+    "2026-10-28": {5:"동아리 활동", 6:"동아리 활동"},
+    "2026-10-30": {all:"체육한마당", upto:6},
+    "2026-11-04": {5:"건강한 식생활·영양교육", 6:"장애인식개선교육"},
+    "2026-11-11": {5:"동아리 활동", 6:"동아리 활동"},
+    "2026-11-18": {5:"수업 없음", 6:"수업 없음"},
+    "2026-11-25": {5:"@mon", 6:"환경·지속가능한 발전교육"},
+    "2026-12-02": {5:"과학부 행사", 6:"과학부 행사"},
+    "2026-12-09": {5:"감염병 예방·미세먼지 대응교육", 6:"학급자치(학급특색활동)"},
+    "2026-12-23": {5:"동아리 활동", 6:"동아리 활동"},
+    "2026-12-24": {all:"축제·동아리발표회", upto:6},
+    // 계획서에는 ‘12/31(수)’로 적혀 있으나 12/31은 목요일이라, 다른 창체와 같은 수요일(12/30)로 봅니다.
+    "2026-12-30": {5:"@fri", 6:"@fri"},
+    "2027-01-07": {1:"교내환경정화활동(봉사)", 2:"종업식"}
+  };
+  // 학사일정 — 달력·목록·D-day 에 ‘학사일정’ 으로 보이고, 고치거나 지울 수 없습니다.
+  var SCHOOL_EVENTS = [
+    {date:"2026-08-18", title:"개학식", type:"school"},
+    {date:"2026-09-02", title:"전국연합학력평가", type:"exam"},
+    {date:"2026-10-13", end:"2026-10-16", title:"1차 정기시험", type:"exam"},
+    {date:"2026-10-20", title:"전국연합학력평가", type:"exam"},
+    {date:"2026-10-22", title:"최소성취수준보장지도② (5~7교시, 대상 학생)", type:"etc"},
+    {date:"2026-10-30", title:"체육한마당", type:"school"},
+    {date:"2026-11-19", title:"대학수학능력시험", type:"school"},
+    {date:"2026-11-24", title:"입학설명회", type:"school"},
+    {date:"2026-12-14", end:"2026-12-18", title:"2차 정기시험", type:"exam"},
+    {date:"2026-12-24", title:"축제·동아리발표회", type:"school"},
+    {date:"2027-01-07", title:"종업식", type:"school"}
+  ].map(function(e, i){
+    e.id = "sch" + i; e.builtin = true;
+    e.subject = ""; e.memo = ""; e.by = ""; e.photos = []; e.createdAt = 0;
+    return e;
+  });
+  function allEvents(){ return State.events.concat(SCHOOL_EVENTS); }
+  function schoolEventsOn(key){
+    return SCHOOL_EVENTS.filter(function(e){ return key >= e.date && key <= (e.end || e.date); });
+  }
+  // 달력 아래 설명에 붙는 한 줄: 그날 창체 계획
+  function ccSummary(key){
+    var plan = CC_PLAN[key];
+    if(!plan) return "";
+    if(plan.all) return "창체 · " + plan.all + " (1~" + plan.upto + "교시)";
+    return "창체 · " + Object.keys(plan).sort().map(function(p){
+      var v = plan[p];
+      return p + "교시 " + (v.charAt(0) === "@" ? DAY_LABEL[v.slice(1)] + "요일 수업" : v);
+    }).join(" · ");
+  }
   // 토·일·공휴일은 숫자를 빨갛게
   function redDayClass(d, key){
     return (d.getDay() === 0 ? " sun" : "") + (d.getDay() === 6 ? " sat" : "") + (holidayOf(key) ? " hol" : "");
@@ -1619,7 +1687,7 @@ var FIREBASE_CONFIG = {
     });
   }
   function upcomingEvents(){
-    return State.events.filter(function(e){ return diffDays(e.date, TODAY) >= 0; })
+    return allEvents().filter(function(e){ return diffDays(e.end || e.date, TODAY) >= 0; })
       .sort(function(a,b){ return a.date < b.date ? -1 : 1; });
   }
   function subjectNames(){
@@ -1718,14 +1786,15 @@ var FIREBASE_CONFIG = {
   function eventRow(ev, opts){
     opts = opts || {};
     var tp = TYPE_MAP[ev.type] || TYPE_MAP.etc;
-    var row = el("div", "ev tap");
+    var row = el("div", "ev" + (ev.builtin ? " builtin" : " tap"));
     row.style.setProperty("--tc", tp.color);
     var body = el("div", "ev-body");
     body.appendChild(el("div", "ev-title", ev.title));
     var meta = el("div", "ev-meta");
     meta.appendChild(el("span", "tag", tp.label));
+    if(ev.builtin) meta.appendChild(el("span", "tag sch", "학사일정"));
     if(ev.subject) meta.appendChild(el("span", null, ev.subject));
-    if(!opts.hideDate) meta.appendChild(el("span", null, mdText(ev.date)));
+    if(!opts.hideDate) meta.appendChild(el("span", null, mdText(ev.date) + (ev.end ? " ~ " + mdText(ev.end) : "")));
     if(ev.by) meta.appendChild(el("span", null, ev.by + " 올림"));
     body.appendChild(meta);
     if(ev.memo) body.appendChild(el("div", "ev-memo", ev.memo));
@@ -1751,8 +1820,10 @@ var FIREBASE_CONFIG = {
     row.appendChild(body);
     if(!opts.hideDday){
       var n = diffDays(ev.date, TODAY);
+      if(n < 0 && ev.end && diffDays(ev.end, TODAY) >= 0) n = 0;   // 시험 기간 중에는 D-DAY
       row.appendChild(el("div", "ev-dday" + (n < 0 ? " past" : ""), ddayText(n)));
     }
+    if(ev.builtin) return row;   // 학사일정은 고칠 수 없습니다
     row.tabIndex = 0;
     row.setAttribute("role", "button");
     row.addEventListener("click", function(){ openEvent(ev); });
@@ -1762,17 +1833,33 @@ var FIREBASE_CONFIG = {
     return row;
   }
 
-  function periodRows(dayIdx, live){
+  // dateKey 를 주면 그날의 창체 계획(CC_PLAN)을 반영합니다.
+  function periodRows(dayIdx, live, dateKey){
     var arr = myTT();
+    var plan = (dateKey && CC_PLAN[dateKey]) || null;
     var wrap = el("div", "periods");
     var m = nowMin();
     SLOTS.forEach(function(sl){
       var name, where = "";
       if(sl.brk){ name = sl.label; }
       else {
-        var c = courseAt(arr, dayIdx, +sl.key);
-        if(c){ name = c[0]; where = c[2] + "실 · " + c[1]; }
-        else name = SLOT_EMPTY[slotIndex(dayIdx, +sl.key)] ? "" : "선택과목";
+        var p = +sl.key;
+        var allDay = plan && plan.all && p <= plan.upto;
+        var v = plan ? (allDay ? plan.all : plan[p]) : null;
+        if(!v && dayIdx === 2 && (p === 5 || p === 6)) v = "창의적 체험활동";   // 수요일 5·6교시
+        if(v && v.charAt(0) === "@"){
+          // 다른 요일 수업으로 바뀐 교시
+          var od = v.slice(1), oi = DAYS.indexOf(od), oc = courseAt(arr, oi, p);
+          name = oc ? oc[0] : (SLOT_EMPTY[slotIndex(oi, p)] ? "" : "선택과목");
+          where = DAY_LABEL[od] + "요일 " + p + "교시 수업" + (oc ? " · " + oc[2] + "실" : "");
+        } else if(v){
+          name = v;
+          where = (allDay || v === "수업 없음") ? "" : "창체";
+        } else {
+          var c = courseAt(arr, dayIdx, p);
+          if(c){ name = c[0]; where = c[2] + "실 · " + c[1]; }
+          else name = SLOT_EMPTY[slotIndex(dayIdx, p)] ? "" : "선택과목";
+        }
       }
       var isNow = live && m >= toMin(sl.s) && m < toMin(sl.e);
       var r = el("div", "prow" + (sl.brk ? " brk" : "") + (isNow ? " now" : ""));
@@ -1813,12 +1900,23 @@ var FIREBASE_CONFIG = {
     var pb = $("home-periods");
     clear(pb);
     var dayIdx = t.getDay() - 1;
-    if(dayIdx < 0 || dayIdx > 4){
-      $("home-tt-note").textContent = "";
+    var todaySch = schoolEventsOn(TODAY);
+    var exam = todaySch.filter(function(e){ return e.end && e.type === "exam"; })[0];
+    if(dayIdx < 0 || dayIdx > 4 || holidayOf(TODAY)){
+      $("home-tt-note").textContent = holidayOf(TODAY);
       pb.appendChild(emptyBox("오늘은 학교 안 가는 날", "일과 시간은 시간표에서 볼 수 있어요"));
+    } else if(exam){
+      $("home-tt-note").textContent = exam.title;
+      pb.appendChild(emptyBox(exam.title + " 기간이에요", "시험 시간표는 따로 안내합니다"));
     } else {
       $("home-tt-note").textContent = State.sid ? State.sid + " 시간표" : "6반 공통";
-      pb.appendChild(periodRows(dayIdx, true));
+      if(todaySch.length){
+        var bn = el("div", "demo-note");
+        bn.appendChild(el("b", null, "오늘"));
+        bn.appendChild(el("span", null, todaySch.map(function(e){ return e.title; }).join(" · ")));
+        pb.appendChild(bn);
+      }
+      pb.appendChild(periodRows(dayIdx, true, TODAY));
     }
 
     var rail = $("home-dday");
@@ -1829,7 +1927,7 @@ var FIREBASE_CONFIG = {
       var d = parseISO(ev.date);
       var c = el("div", "dday");
       c.style.setProperty("--tc", tp.color);
-      c.appendChild(el("div", "n", ddayText(diffDays(ev.date, TODAY))));
+      c.appendChild(el("div", "n", ddayText(Math.max(0, diffDays(ev.date, TODAY)))));   // 진행 중인 시험 기간은 D-DAY
       c.appendChild(el("div", "t", ev.title));
       c.appendChild(el("div", "s", tp.label + " · " + (d.getMonth()+1) + "/" + d.getDate()));
       rail.appendChild(c);
@@ -1927,6 +2025,9 @@ var FIREBASE_CONFIG = {
           node.addEventListener("click", function(){
             toast(c[0] + " · " + c[1] + " 선생님 · " + c[2] + "실");
           });
+        } else if(isEmpty && di === 2 && (p === 5 || p === 6)){
+          node = el("div", cls + " cc", "창체");
+          node.addEventListener("click", function(){ toast("수요일 5·6교시는 창의적 체험활동 시간입니다. 날짜별 내용은 일정 달력에 있어요"); });
         } else if(isEmpty){
           node = el("div", cls + " none", "");
         } else {
@@ -2068,7 +2169,11 @@ var FIREBASE_CONFIG = {
     var grid = $("cal-grid");
     clear(grid);
     var byDate = {};
-    State.events.forEach(function(e){ (byDate[e.date] = byDate[e.date] || []).push(e); });
+    // 기간이 있는 학사일정(정기시험)은 그 기간의 모든 날짜에 표시합니다.
+    allEvents().forEach(function(e){
+      if(!e.end){ (byDate[e.date] = byDate[e.date] || []).push(e); return; }
+      for(var k = e.date; k <= e.end; k = iso(addDays(parseISO(k), 1))) (byDate[k] = byDate[k] || []).push(e);
+    });
     var first = new Date(calCursor.getFullYear(), calCursor.getMonth(), 1);
     var start = addDays(first, -first.getDay());
     for(var i = 0; i < 42; i++){
@@ -2086,7 +2191,7 @@ var FIREBASE_CONFIG = {
       // 휴대폰 칸은 좁아서 띄어쓴 자리에서 두 줄로 나뉩니다.
       if(hol){
         var short = hol.replace(/\(.*\)$/, "");
-        short = {"대체공휴일":"대체 공휴일", "부처님오신날":"부처님 오신날", "지방선거일":"지방 선거일"}[short] || short;
+        short = {"대체공휴일":"대체 공휴일", "부처님오신날":"부처님 오신날", "지방선거일":"지방 선거일", "재량휴업일":"재량 휴업일"}[short] || short;
         cell.appendChild(el("div", "holname", short));
       }
       // 그날 일정의 제목을 막대로. 칸이 모자라면 마지막 줄을 ‘+N’ 으로 줄입니다.
@@ -2115,6 +2220,8 @@ var FIREBASE_CONFIG = {
     $("day-panel-sub").textContent = (n === 0 ? "오늘" : ddayText(n)) + (selHol ? " · " + selHol : "");
     var box = $("day-events");
     clear(box);
+    var cc = ccSummary(calSelected);
+    if(cc) box.appendChild(el("div", "cc-note", cc));
     var list = byDate[calSelected] || [];
     if(!list.length){
       var add = el("button", "btn", "이 날에 일정 추가");
@@ -2147,7 +2254,7 @@ var FIREBASE_CONFIG = {
   function renderList(){
     var wrap = $("list-groups");
     clear(wrap);
-    var evs = State.events.filter(function(e){ return listFilter === "all" || e.type === listFilter; });
+    var evs = allEvents().filter(function(e){ return listFilter === "all" || e.type === listFilter; });
     var groups = [
       {label:"오늘",     test:function(e){ return e.date === TODAY; }},
       {label:"이번 주",  test:function(e){ var n = diffDays(e.date, TODAY); return n > 0 && n <= 7; }},
