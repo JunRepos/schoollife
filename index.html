@@ -974,7 +974,7 @@
 <div class="sheet" id="sheet-uni" role="dialog" aria-modal="true" aria-labelledby="un-title">
   <div class="grabber"></div>
   <h2 id="un-title">대학 환산표</h2>
-  <p class="lead">2028학년도 대입전형시행계획에 적힌 등급별 환산점수를 넣어 두면, 21명 점수가 자동으로 계산됩니다.</p>
+  <p class="lead">2028학년도 대입전형시행계획에 적힌 등급별 환산점수를 넣어 두면, 우리 반 전체 점수가 자동으로 계산됩니다.</p>
   <form id="un-form">
     <div class="field">
       <label for="u-name">대학 · 전형 이름</label>
@@ -2428,7 +2428,7 @@ var FIREBASE_CONFIG = {
 
     var unis = allUnis();
     if(!unis.length){
-      box.appendChild(emptyBox("등록된 대학이 없어요", "2028 대입전형시행계획의 등급별 환산점수를 넣으면 21명 점수가 한 번에 계산됩니다"));
+      box.appendChild(emptyBox("등록된 대학이 없어요", "2028 대입전형시행계획의 등급별 환산점수를 넣으면 우리 반 전체 점수가 한 번에 계산됩니다"));
       var help = el("p", "srcnote");
       help.textContent = "대학마다 환산 방식이 달라 미리 넣어 두지 않았습니다. 잘못된 표로 학생 상담을 하면 위험해서, 시행계획에서 직접 확인한 값만 넣도록 했습니다. 예: 1등급 100 / 2등급 98 / 3등급 97.5 / 4등급 95 / 5등급 90 처럼 다섯 칸을 채우면 됩니다.";
       box.appendChild(help);
@@ -3691,7 +3691,7 @@ var FIREBASE_CONFIG = {
     var v = $("l-sid").value.trim();
     var err = $("lg-sid-err");
     if(!STUDENT_TT[v]){
-      err.textContent = "2학년 6반 학번이 아닙니다. 20601부터 20621까지 있어요.";
+      err.textContent = "2학년 6반 학번이 아닙니다. " + SIDS[0] + "부터 " + SIDS[SIDS.length - 1] + "까지 있어요.";
       err.hidden = false;
       return;
     }
@@ -4252,7 +4252,7 @@ var FIREBASE_CONFIG = {
         prev.appendChild(l);
       });
       if(pack.length > 3) prev.appendChild(el("div", "prev-line", "그 외 " + (pack.length - 3) + "명…"));
-      if(unknown.length) prev.appendChild(el("div", "warnbox", "우리 반 학번으로 이어지지 않아 건너뜁니다: " + unknown.join(", ")));
+      if(unknown.length) prev.appendChild(el("div", "warnbox", "우리 반 학번으로 이어지지 않아 건너뜁니다(전학 간 학생 포함): " + unknown.join(", ")));
       if(mismatch.length) prev.appendChild(el("div", "warnbox", "명단과 이름이 다릅니다. 그대로 저장해도 되지만 한 번 확인해 주세요.\n" + mismatch.join("\n")));
       $("im-save").hidden = false;
     })["catch"](function(ex){
@@ -4260,7 +4260,7 @@ var FIREBASE_CONFIG = {
       prev.hidden = true;
       importReady = null;
       var msg = "파일을 읽지 못했습니다.";
-      if(ex && ex.message === "nomatch") msg = "우리 반(20601~20621) 학생을 찾지 못했습니다. 2학년 6반 파일이 맞는지 확인해 주세요.";
+      if(ex && ex.message === "nomatch") msg = "우리 반(" + SIDS[0] + "~" + SIDS[SIDS.length - 1] + ") 학생을 찾지 못했습니다. 2학년 6반 파일이 맞는지 확인해 주세요.";
       else if(ex && ex.message === "empty") msg = "표에서 과목을 찾지 못했습니다. 나이스 ‘교과학습발달상황’ 엑셀이 맞는지 확인해 주세요.";
       else if(!window.XLSX) msg = "엑셀을 읽는 도구를 내려받지 못했습니다. 인터넷 연결을 확인하고 다시 열어 주세요.";
       showErr("im-err", msg);
@@ -4465,7 +4465,7 @@ var FIREBASE_CONFIG = {
     {id:"notice",  name:"게시판 관리",                    count:2, members:[]},
     {id:"phone",   name:"핸드폰 관리",                    count:3, members:["20604","20610"]},
     {id:"media",   name:"멀티미디어 관리",                count:1, members:["20611"]},
-    {id:"meal",    name:"급식 도우미",                    count:3, members:["20601","20613","20617"]},
+    {id:"meal",    name:"급식 도우미",                    count:3, members:["20613","20617"]},
     {id:"recycle", name:"분리수거",                       count:3, members:["20605","20609","20612"]},
     {id:"clean",   name:"청소 상태 관리",                 count:3, members:["20620"]}
   ];
