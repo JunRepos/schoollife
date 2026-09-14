@@ -166,7 +166,8 @@
   .cal-grid{gap:2px}
   .day{aspect-ratio:1/1.05; border:0; background:transparent; cursor:pointer; padding:4px 0 0; display:flex; flex-direction:column; align-items:center; gap:4px; border-radius:9px; font-variant-numeric:tabular-nums}
   .day .n{font-size:13px; font-weight:500; color:var(--ink-2); width:22px; height:22px; display:grid; place-items:center}
-  .day.sun .n{color:var(--t-exam)}
+  .day.sun .n, .day.sat .n, .day.hol .n{color:var(--t-exam)}
+  .dow-row span.sat{color:var(--t-exam)}
   .day.out{visibility:hidden}
   .day.today .n{background:var(--ink); color:var(--paper); border-radius:50%; font-weight:600}
   .day[aria-selected="true"]{background:var(--surface-2); box-shadow:inset 0 0 0 1.5px var(--ink)}
@@ -184,6 +185,8 @@
     box-shadow:inset 2px 0 0 var(--dc);
   }
   .evmore{font-size:10px; font-weight:600; color:var(--muted); text-align:left; padding-left:3px; line-height:13px}
+  .holname{font-size:10px; font-weight:600; color:var(--t-exam); text-align:center; line-height:13px; letter-spacing:-.02em; word-break:keep-all; overflow:hidden}
+  body.wide .holname{font-size:11.5px; text-align:left; padding-left:6px; line-height:17px; letter-spacing:0; white-space:nowrap; text-overflow:ellipsis}
   body.wide #cal-grid .day{min-height:108px; padding:6px 5px}
   body.wide .evbar{height:19px; line-height:19px; font-size:11.5px; padding:0 6px 0 7px; text-overflow:ellipsis}
   body.wide .evmore{font-size:11px; padding-left:6px}
@@ -670,7 +673,7 @@
             </div>
           </div>
           <div class="dow-row">
-            <span class="sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+            <span class="sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="sat">토</span>
           </div>
           <div class="cal-grid" id="cal-grid"></div>
           <div class="day-panel">
@@ -1172,6 +1175,30 @@ var FIREBASE_CONFIG = {
   var TYPE_MAP = {};
   TYPES.forEach(function(t){ TYPE_MAP[t.id] = t; });
 
+  // 관공서 공휴일 (대체공휴일·선거일 포함). 해가 바뀌면 여기에 다음 해를 더합니다.
+  // 2026: 노동절(5/1) 공휴일 지정, 제헌절(7/17) 공휴일 재지정 반영
+  var HOLIDAYS = {
+    "2026-01-01":"신정",
+    "2026-02-16":"설날 연휴", "2026-02-17":"설날", "2026-02-18":"설날 연휴",
+    "2026-03-01":"삼일절", "2026-03-02":"대체공휴일(삼일절)",
+    "2026-05-01":"노동절",
+    "2026-05-05":"어린이날",
+    "2026-05-24":"부처님오신날", "2026-05-25":"대체공휴일(부처님오신날)",
+    "2026-06-03":"지방선거일",
+    "2026-06-06":"현충일",
+    "2026-07-17":"제헌절",
+    "2026-08-15":"광복절", "2026-08-17":"대체공휴일(광복절)",
+    "2026-09-24":"추석 연휴", "2026-09-25":"추석", "2026-09-26":"추석 연휴",
+    "2026-10-03":"개천절", "2026-10-05":"대체공휴일(개천절)",
+    "2026-10-09":"한글날",
+    "2026-12-25":"성탄절"
+  };
+  function holidayOf(key){ return HOLIDAYS[key] || ""; }
+  // 토·일·공휴일은 숫자를 빨갛게
+  function redDayClass(d, key){
+    return (d.getDay() === 0 ? " sun" : "") + (d.getDay() === 6 ? " sat" : "") + (holidayOf(key) ? " hol" : "");
+  }
+
   var KINDS = [
     {id:"counsel", label:"상담",   color:"var(--t-task)"},
     {id:"behavior",label:"행동특성", color:"var(--t-perf)"},
@@ -1610,7 +1637,7 @@ var FIREBASE_CONFIG = {
     var out = [], d = addDays(today(), State.teacher ? 0 : 1), guard = 0;
     while(out.length < n && guard < 60){
       var dw = d.getDay();
-      if(dw >= 1 && dw <= 5) out.push(iso(d));
+      if(dw >= 1 && dw <= 5 && !holidayOf(iso(d))) out.push(iso(d));   // 공휴일에는 면담이 없습니다
       d = addDays(d, 1); guard++;
     }
     return out;
@@ -2048,19 +2075,27 @@ var FIREBASE_CONFIG = {
       var d = addDays(start, i), key = iso(d);
       var inMonth = d.getMonth() === calCursor.getMonth();
       if(i >= 35 && !inMonth) break;
-      var cell = el("button", "day" + (inMonth ? "" : " out") + (d.getDay() === 0 ? " sun" : "") + (key === TODAY ? " today" : ""));
+      var hol = inMonth ? holidayOf(key) : "";
+      var cell = el("button", "day" + (inMonth ? "" : " out") + redDayClass(d, key) + (key === TODAY ? " today" : ""));
       cell.type = "button";
       if(!inMonth) cell.tabIndex = -1;
       cell.setAttribute("aria-selected", key === calSelected ? "true" : "false");
-      cell.setAttribute("aria-label", (d.getMonth()+1) + "월 " + d.getDate() + "일");
+      cell.setAttribute("aria-label", (d.getMonth()+1) + "월 " + d.getDate() + "일" + (hol ? ", " + hol : ""));
       cell.appendChild(el("div", "n", d.getDate()));
+      // 칸 안에는 짧게(‘대체 공휴일’), 전체 이름은 아래 날짜 설명에.
+      // 휴대폰 칸은 좁아서 띄어쓴 자리에서 두 줄로 나뉩니다.
+      if(hol){
+        var short = hol.replace(/\(.*\)$/, "");
+        short = {"대체공휴일":"대체 공휴일", "부처님오신날":"부처님 오신날", "지방선거일":"지방 선거일"}[short] || short;
+        cell.appendChild(el("div", "holname", short));
+      }
       // 그날 일정의 제목을 막대로. 칸이 모자라면 마지막 줄을 ‘+N’ 으로 줄입니다.
       var evs = (byDate[key] || []).slice().sort(function(a, b){
         var ta = TYPES.indexOf(TYPE_MAP[a.type] || TYPE_MAP.etc), tb = TYPES.indexOf(TYPE_MAP[b.type] || TYPE_MAP.etc);
         return ta !== tb ? ta - tb : (a.createdAt || 0) - (b.createdAt || 0);
       });
       var bars = el("div", "evbars");
-      var cap = document.body.classList.contains("wide") ? 4 : 2;
+      var cap = (document.body.classList.contains("wide") ? 4 : 2) - (hol ? 1 : 0);
       var shown = evs.length > cap ? cap - 1 : evs.length;
       evs.slice(0, shown).forEach(function(e){
         var bar = el("span", "evbar", e.title);
@@ -2069,14 +2104,15 @@ var FIREBASE_CONFIG = {
       });
       if(evs.length > shown) bars.appendChild(el("span", "evmore", "+" + (evs.length - shown)));
       cell.appendChild(bars);
-      if(evs.length) cell.setAttribute("aria-label", (d.getMonth()+1) + "월 " + d.getDate() + "일, 일정 " + evs.length + "개");
+      if(evs.length) cell.setAttribute("aria-label", (d.getMonth()+1) + "월 " + d.getDate() + "일" + (hol ? ", " + hol : "") + ", 일정 " + evs.length + "개");
       (function(k){ cell.addEventListener("click", function(){ calSelected = k; renderCal(); }); })(key);
       grid.appendChild(cell);
     }
     var sd = parseISO(calSelected);
     $("day-panel-title").textContent = (sd.getMonth()+1) + "월 " + sd.getDate() + "일 (" + DOW_KO[sd.getDay()] + ")";
     var n = diffDays(calSelected, TODAY);
-    $("day-panel-sub").textContent = n === 0 ? "오늘" : ddayText(n);
+    var selHol = holidayOf(calSelected);
+    $("day-panel-sub").textContent = (n === 0 ? "오늘" : ddayText(n)) + (selHol ? " · " + selHol : "");
     var box = $("day-events");
     clear(box);
     var list = byDate[calSelected] || [];
@@ -3544,7 +3580,7 @@ var FIREBASE_CONFIG = {
 
     var dow = el("div", "dow-row");
     ["일","월","화","수","목","금","토"].forEach(function(t, i){
-      dow.appendChild(el("span", i === 0 ? "sun" : null, t));
+      dow.appendChild(el("span", i === 0 ? "sun" : (i === 6 ? "sat" : null), t));
     });
     pop.appendChild(dow);
 
@@ -3558,7 +3594,7 @@ var FIREBASE_CONFIG = {
       var off = inMonth && DP.opts.disabled && DP.opts.disabled(key);
       var cell = el("button", "day"
         + (inMonth ? "" : " out")
-        + (d.getDay() === 0 ? " sun" : "")
+        + redDayClass(d, key)
         + (key === TODAY ? " today" : "")
         + (key === val ? " sel" : "")
         + (off ? " off" : ""));
@@ -3649,7 +3685,7 @@ var FIREBASE_CONFIG = {
   $("m-date").addEventListener("click", function(){
     openDatePop("m-date", {
       // 면담은 평일에만 있습니다.
-      disabled: function(ds){ var w = parseISO(ds).getDay(); return w === 0 || w === 6; }
+      disabled: function(ds){ var w = parseISO(ds).getDay(); return w === 0 || w === 6 || !!holidayOf(ds); }
     });
   });
 
