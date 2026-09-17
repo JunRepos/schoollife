@@ -389,6 +389,24 @@
     padding:9px 11px; font-size:12px; color:var(--ink-2); line-height:1.55; margin-bottom:10px;
   }
 
+  /* 모의고사 */
+  .mock-info{display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 10px; margin-bottom:10px; font-size:13.5px}
+  .mock-info b{font-weight:700}
+  .mock-info span{color:var(--muted); font-size:12px}
+  .mock-info .link-btn{margin-left:auto; color:var(--t-exam)}
+  .mtbl{min-width:600px}
+  .mtbl tbody tr{cursor:pointer}
+  .mtbl tbody tr:hover td{background:var(--surface-2)}
+  .mtbl tbody tr[aria-selected="true"] td{background:var(--mark-soft)}
+  .mtbl .nm{white-space:nowrap; font-weight:600}
+  .mtbl .nm small{display:block; font-weight:500; color:var(--muted); font-size:10.5px}
+  .mtbl tfoot td{border-top:1px solid var(--rule); color:var(--ink-2); font-weight:600; background:var(--surface-2); padding:7px 8px}
+  .mgr{display:inline-block; min-width:17px; margin-left:5px; padding:0 4px; border-radius:5px; background:var(--surface-2); color:var(--ink); font-size:11px; font-weight:700; text-align:center; font-family:var(--serif)}
+  .mgr.top{background:var(--ink); color:var(--paper)}
+  .mock-detail{margin-top:18px}
+  .mock-detail h3{font-size:13px; font-weight:700; margin:18px 0 6px; color:var(--ink-2)}
+  .mock-detail .gtbl{min-width:480px}
+
   /* 공통 */
   .empty{text-align:center; padding:22px 16px; color:var(--muted); font-size:13px}
   .empty .pen{font-family:var(--pen); font-size:22px; color:var(--ink-2); display:block; margin-bottom:1px}
@@ -728,6 +746,14 @@
         <div class="roles" id="roles-list"></div>
         <div id="roles-left"></div>
         <p class="hint" id="roles-hint"></p>
+      </section>
+    </div>
+
+    <!-- 모의고사 (선생님 전용) -->
+    <div id="view-mock" hidden>
+      <section style="border-top:0">
+        <div id="mock-demo"></div>
+        <div id="mock-body"></div>
       </section>
     </div>
 
@@ -1078,6 +1104,25 @@
   </form>
 </div>
 
+<!-- 모의고사 불러오기 -->
+<div class="sheet" id="sheet-mock" role="dialog" aria-modal="true" aria-labelledby="mk-title">
+  <div class="grabber"></div>
+  <h2 id="mk-title">모의고사 불러오기</h2>
+  <p class="lead">전국연합학력평가 <b>성적통지표(학생용)</b> PDF를 고르세요. 파일은 이 브라우저 안에서만 읽고, 점수만 선생님 계정으로 저장합니다.</p>
+  <div class="warnbox">학생 성적은 선생님 계정으로만 읽을 수 있는 곳에 저장됩니다. PDF 파일과 이름은 저장하지 않고, 공개 저장소에도 올라가지 않습니다.</div>
+  <label class="filepick">
+    <b>PDF 파일 고르기</b>
+    <span>반 전체가 한 파일에 든 성적통지표를 그대로 넣으면 됩니다</span>
+    <input type="file" id="mk-file" accept="application/pdf,.pdf" hidden>
+  </label>
+  <div id="mk-preview" hidden style="margin-top:12px"></div>
+  <p class="form-err" id="mk-err" hidden></p>
+  <div class="sheet-actions">
+    <button type="button" class="btn" data-close>취소</button>
+    <button type="button" class="btn primary" id="mk-save" hidden>저장</button>
+  </div>
+</div>
+
 <!-- 1인 1역: 자리 채우기 -->
 <div class="sheet" id="sheet-pick" role="dialog" aria-modal="true" aria-labelledby="pk-title">
   <div class="grabber"></div>
@@ -1362,7 +1407,8 @@ var FIREBASE_CONFIG = {
     notices:[], events:[], bookings:[], details:{}, resources:[],
     roster:{}, entries:[], entriesFor:"", recSel:"",
     grades:{}, unis:[], recMode:"rec", scoreMode:"area", ipOpen:{},
-    roles:null, rolesErr:""
+    roles:null, rolesErr:"",
+    mocks:[], mockSel:"", mockStu:""
   };
 
   /* ---------------- 데모(로컬) ---------------- */
@@ -1378,6 +1424,7 @@ var FIREBASE_CONFIG = {
       State.unis = lsGet("a26.unis") || [];
       var lr = lsGet("a26.roles");
       State.roles = lr ? normRoles(lr) : null;
+      State.mocks = lsGet("a26.mocks") || [];
       State.teacher = !!lsGet("a26.teacherMode");
     },
     save:function(){
@@ -1428,8 +1475,8 @@ var FIREBASE_CONFIG = {
             if(unsubRoster){ unsubRoster(); unsubRoster = null; }
             if(unsubEntries){ unsubEntries(); unsubEntries = null; }
             State.roster = {}; State.details = {}; State.entries = []; State.entriesFor = "";
-            State.grades = {}; State.unis = [];
-            if(activeTab === "rec") switchTab("home");
+            State.grades = {}; State.unis = []; State.mocks = []; State.mockStu = "";
+            if(activeTab === "rec" || activeTab === "mock") switchTab("home");
           }
           applyWide();
           render();
@@ -1508,6 +1555,13 @@ var FIREBASE_CONFIG = {
                 topN: v.topN || 0, bestOf: !!v.bestOf, achRank: v.achRank || null,
                 past: Array.isArray(v.past) ? v.past : [], source: v.source || ""};
       }).sort(function(a,b){ return a.name < b.name ? -1 : 1; });
+      render();
+    }, quiet);
+    FB.db.collection("mocks").onSnapshot(function(snap){
+      State.mocks = snap.docs.map(function(d){
+        var v = d.data() || {};
+        return {id:d.id, title:v.title || "", date:v.date || "", students:v.students || {}, updatedAt:v.updatedAt || 0};
+      });
       render();
     }, quiet);
     FB.db.collection("bookingDetails").onSnapshot(function(snap){
@@ -2934,6 +2988,8 @@ var FIREBASE_CONFIG = {
      icon:'<circle cx="11" cy="8" r="3.2"/><path d="M4.8 18.2c0-3.1 2.8-5.2 6.2-5.2s6.2 2.1 6.2 5.2"/>'},
     {id:"roles", label:"1인1역", title:"1인 1역", eyebrow:"1인 1역", view:"view-roles",
      icon:'<rect x="4" y="3.5" width="14" height="15" rx="2"/><path d="M7.3 8.2l1.3 1.3 2.4-2.4M7.3 13.7l1.3 1.3 2.4-2.4M13.4 8.6h1.8M13.4 14.1h1.8"/>'},
+    {id:"mock", label:"모의고사", title:"모의고사", eyebrow:"모의고사", view:"view-mock", teacher:true,
+     icon:'<path d="M4.5 18.5V4.5"/><path d="M4.5 18.5h14"/><path d="M8 15v-4M11.5 15V8M15 15v-6"/>'},
     {id:"rec", label:"학생 기록", title:"학생 기록", eyebrow:"학생 기록", view:"view-rec", teacher:true,
      icon:'<path d="M6 3.5h9A1.5 1.5 0 0 1 16.5 5v13.5H6A1.5 1.5 0 0 1 4.5 17V5A1.5 1.5 0 0 1 6 3.5z"/><path d="M8 7.5h5M8 11h5M8 14.5h3"/>'}
   ];
@@ -2986,6 +3042,8 @@ var FIREBASE_CONFIG = {
         label = "전달사항 쓰기"; action = function(){ openNotice(null); };
       } else if(activeTab === "notice" && noticeMode === "res"){
         label = "자료 올리기"; action = function(){ openRes(null); };
+      } else if(activeTab === "mock"){
+        label = "모의고사 불러오기"; action = function(){ openMockImport(); };
       } else if(activeTab === "roles"){
         label = "역할 추가"; action = function(){ openRole(null); };
       } else if(activeTab === "rec" && State.recSel){
@@ -3804,7 +3862,7 @@ var FIREBASE_CONFIG = {
   function closeSheets(){
     closeDatePop();
     $("scrim").classList.remove("open");
-    ["sheet-login","sheet-notice","sheet-res","sheet-event","sheet-book","sheet-move","sheet-entry","sheet-roster","sheet-import","sheet-uni","sheet-pick","sheet-role"]
+    ["sheet-login","sheet-notice","sheet-res","sheet-event","sheet-book","sheet-move","sheet-entry","sheet-roster","sheet-import","sheet-uni","sheet-pick","sheet-role","sheet-mock"]
       .forEach(function(id){ $(id).classList.remove("open"); });
   }
   $("scrim").addEventListener("click", closeSheets);
@@ -4620,6 +4678,523 @@ var FIREBASE_CONFIG = {
     })["catch"](function(err){ showErr("ro-err", saveErrText(err)); });
   });
 
+  /* ================= 모의고사 =================
+     전국연합학력평가 ‘성적통지표(학생용)’ PDF 를 선생님 브라우저 안에서 읽어
+     점수만 선생님 전용(mocks)에 저장합니다. PDF 파일과 학생 이름은 저장하지 않습니다. */
+  var MOCK_SUBJ = ["국어", "수학", "영어", "한국사", "사회", "과학"];
+
+  function loadPdfJS(){
+    if(window.pdfjsLib) return Promise.resolve();
+    var base = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+    return loadScript(base + "pdf.min.js").then(function(){
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = base + "pdf.worker.min.js";
+    });
+  }
+  // pdf.js 는 글자를 하나씩 줍니다. 같은 줄에서 가까이 붙은 글자끼리 이어 붙여 낱말로 만듭니다.
+  function pdfTokens(items){
+    var out = [], cur = "", lastY = null, lastEnd = null, lastH = 0;
+    function flush(){ if(cur.trim()) out.push(cur.trim()); cur = ""; }
+    items.forEach(function(it){
+      var s = it.str, x = it.transform[4], y = it.transform[5], w = it.width;
+      var h = Math.abs(it.transform[3]) || it.height || 10;
+      if(s === ""){ if(it.hasEOL) flush(); return; }
+      if(cur !== ""){
+        var m = Math.max(lastH, h);
+        var sameLine = Math.abs(y - lastY) < m * 0.5;
+        var gap = x - lastEnd;
+        if(!sameLine || gap > m * 0.6 || gap < -m * 0.5) flush();
+      }
+      if(s.trim() === ""){ if(cur !== "") cur += " "; }
+      else cur += s;
+      lastEnd = x + w; lastY = y; lastH = h;
+      if(it.hasEOL) flush();
+    });
+    flush();
+    return out;
+  }
+
+  /* 성적통지표 1쪽의 글자 조각 → 성적 객체.
+     조각을 모두 띄어쓰기 단위로 쪼갠 뒤 읽기 때문에 ‘국어’ / ‘국’ ‘어’ / ‘한 국 사’ 어느 쪽이든 같은 결과가 나옵니다. */
+  function parseMockPage(raw){
+    var t = [];
+    raw.forEach(function(s){
+      String(s).split(/\s+/).forEach(function(p){ if(p) t.push(p); });
+    });
+    var NUM = /^-?\d+(\.\d+)?$/;
+    function isNum(s){ return s != null && NUM.test(s); }
+    function idx(pred, from){
+      for(var i = Math.max(0, from || 0); i < t.length; i++) if(pred(t[i], i)) return i;
+      return -1;
+    }
+    // i 부터 1~max 조각을 이어 붙인 글자가 names 중 하나와 같으면 {name, len}
+    function joinAt(i, names, max){
+      var s = "";
+      for(var k = 0; k < (max || 4) && i + k < t.length; k++){
+        s += t[i + k];
+        if(Object.prototype.hasOwnProperty.call(names, s)) return {name: names[s], len: k + 1};
+      }
+      return null;
+    }
+    function findJoin(names, from, to, max){
+      for(var i = Math.max(0, from || 0); i < (to == null ? t.length : to); i++){
+        var m = joinAt(i, names, max);
+        if(m){ m.at = i; return m; }
+      }
+      return null;
+    }
+    var SUBJ = {"국어":"국어", "수학":"수학", "영어":"영어", "한국사":"한국사", "사회":"사회", "과학":"과학"};
+
+    var out = {title:"", year:"", date:"", school:"", grade:null, klass:null, no:null, name:"",
+               subjects:{}, detail:{}, review:{}, combo:{}};
+
+    var ti = idx(function(s){ return /전국연합학력평가/.test(s); });
+    if(ti < 0) return null;
+    var yi = idx(function(s){ return /^\d{4}학년도$/.test(s); });
+    if(yi >= 0 && yi < ti){
+      out.year = t[yi].slice(0, 4);
+      out.title = t.slice(yi + 1, ti + 1).join(" ");
+    } else out.title = t[ti];
+    out.title = out.title.replace(/(\d+월)\s*(고\d)/, "$1 $2");
+
+    // 머리: ‘○○고등학교’ 뒤에 학년 · 반 · 번호 · 성명 · 실시일
+    var hi = idx(function(s){ return /고등학교$/.test(s); }, ti);
+    if(hi >= 0 && isNum(t[hi+1]) && isNum(t[hi+2]) && isNum(t[hi+3])){
+      out.school = t[hi];
+      out.grade = +t[hi+1]; out.klass = +t[hi+2]; out.no = +t[hi+3];
+      out.name = t[hi+4] || "";
+      var dm = t.slice(hi + 5, hi + 8).join(" ").match(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);
+      if(dm) out.date = dm[1] + "-" + ("0" + dm[2]).slice(-2) + "-" + ("0" + dm[3]).slice(-2);
+    }
+
+    // 영역별 성적: ‘9등급’ 머리글 뒤 ~ ‘영역＼문항’ 앞
+    var s0 = idx(function(s){ return s === "9등급"; }, hi);
+    var s1 = idx(function(s){ return s.indexOf("영역") === 0 && s.indexOf("문항") > 0; }, s0 + 1);
+    if(s0 < 0 || s1 < 0) return null;
+    var i = s0 + 1;
+    while(i < s1){
+      var lb = joinAt(i, SUBJ, 3);
+      if(!lb){ i++; continue; }
+      i += lb.len;
+      var sub = {max:null, raw:null, grade:null};
+      if(isNum(t[i])) sub.max = +t[i++];
+      if(isNum(t[i])) sub.raw = +t[i++];
+      if(/^원점수에/.test(t[i] || "")){
+        // 영어 · 한국사: 원점수에 의한 등급 ( 8 )
+        var k = i, g = "";
+        while(k < s1 && k < i + 8){ g += " " + t[k]; if(/\)/.test(t[k])) break; k++; }
+        var gm = g.match(/등급\s*\(\s*(\d)/);
+        if(gm) sub.grade = +gm[1];
+        i = k + 1;
+      } else if(/~/.test(t[i] || "")){
+        i++;                                               // 표준점수 범위(0~200)
+        if(isNum(t[i])) sub.std = +t[i++];
+        if(/^\d+\/\d+$/.test(t[i] || "")) sub.classRank = t[i++];
+        if(/^\d+\/\d+$/.test(t[i] || "")) sub.schoolRank = t[i++];
+        if(isNum(t[i])) sub.pct = +t[i++];
+        if(isNum(t[i])) sub.grade = +t[i++];
+      }
+      if(isNum(t[i])) sub.takers = +t[i];                  // 응시자수
+      if(sub.raw != null || sub.grade != null) out.subjects[lb.name] = sub;
+      while(i < s1 && !joinAt(i, SUBJ, 3)) i++;            // 등급별 전국 인원·비율은 건너뜀
+    }
+
+    // 세부영역(국어 5 · 수학 4 · 영어 4). 세 과목이 한 줄에 나란히 있어 (배점, 득점, 전국평균) 묶음 순서로 나눕니다.
+    var DETAIL = {
+      "국어": ["어휘·개념", "사실적 이해", "추론적 이해", "비판적 이해", "적용·창의"],
+      "수학": ["계산", "이해", "추론", "문제해결"],
+      "영어": ["듣기", "말하기", "읽기", "쓰기"]
+    };
+    var d0m = findJoin({"세부영역": 1}, s1, null, 4);     // ‘세부영역’ 또는 ‘세 부 영 역’
+    var d0 = d0m ? d0m.at : -1;
+    var d1 = idx(function(s){ return /^보충학습/.test(s); }, d0 + 1);
+    if(d0 >= 0 && d1 > d0){
+      var nums = [];
+      for(var q = d0; q < d1; q++) if(isNum(t[q])) nums.push(+t[q]);
+      var order = [];
+      for(var row = 0; row < 5; row++) ["국어", "수학", "영어"].forEach(function(sb){ if(row < DETAIL[sb].length) order.push([sb, row]); });
+      if(nums.length === order.length * 3){
+        order.forEach(function(o, n){
+          (out.detail[o[0]] = out.detail[o[0]] || [])[o[1]] =
+            {name: DETAIL[o[0]][o[1]], max: nums[n*3], got: nums[n*3+1], avg: nums[n*3+2]};
+        });
+      }
+    }
+
+    // 보충학습이 필요한 문항번호
+    var v0 = idx(function(s){ return /뒷면참조/.test(s); }, d1);
+    var v1 = findJoin({"기타참고자료": 1}, v0 + 1, null, 8);   // ‘기 타 참 고 자 료’ 로 쪼개져 올 수도
+    if(v0 >= 0 && v1){
+      var RV = {"국어":"국어", "수학":"수학", "영어":"영어", "한국사":"한국사", "사회탐구":"사회", "과학탐구":"과학"};
+      for(var w = v0 + 1; w < v1.at; w++){
+        var mm = joinAt(w, RV, 4);
+        if(!mm) continue;
+        var val = t[w + mm.len] || "";
+        out.review[mm.name] = /\d/.test(val) ? val : "";
+        w += mm.len;
+      }
+    }
+
+    // 기타참고자료: 합산 백분위
+    if(v1){
+      var CB = {"국어+수학+탐구":"국어+수학+탐구", "국어+수학":"국어+수학", "국어+탐구":"국어+탐구",
+                "수학+탐구":"수학+탐구", "우수탐구":"우수탐구", "합산":"탐구 합산"};
+      for(var z = v1.at + v1.len; z < t.length && z < v1.at + 60; z++){
+        // 가장 긴 이름부터 맞춰 봅니다 (국어+수학+탐구 가 국어+수학 으로 잘리지 않게)
+        var best = null, js = "";
+        for(var k2 = 0; k2 < 10 && z + k2 < t.length; k2++){   // ‘국 어 + 수 학 + 탐 구’ 는 8 조각
+          js += t[z + k2];
+          if(Object.prototype.hasOwnProperty.call(CB, js) && isNum(t[z + k2 + 1])) best = {name: CB[js], len: k2 + 1};
+        }
+        if(!best) continue;
+        var e = z + best.len;
+        if(!out.combo[best.name]) out.combo[best.name] = {pct: +t[e], n: isNum(t[e+1]) ? +t[e+1] : null};
+        z = e;
+      }
+    }
+    return out;
+  }
+
+  function mockList(){
+    return State.mocks.slice().sort(function(a, b){ return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); });
+  }
+  function currentMock(){
+    var l = mockList();
+    for(var i = 0; i < l.length; i++) if(l[i].id === State.mockSel) return l[i];
+    return l[0] || null;
+  }
+  function mockErrText(e){
+    if(e && e.code === "permission-denied" && State.teacher){
+      var who = (State.user && State.user.email) || "(로그인 정보 없음)";
+      return "저장하지 못했습니다. Firestore 규칙에 모의고사(mocks) 부분을 넣어 다시 게시해 주세요.\n로그인한 계정: " + who;
+    }
+    return saveErrText(e);
+  }
+  function mgrBadge(g){
+    var b = el("span", "mgr" + (g != null && g <= 2 ? " top" : ""), g == null ? "—" : String(g));
+    b.title = g == null ? "" : g + "등급";
+    return b;
+  }
+
+  var mockScroll = false;
+  function renderMock(){
+    fillDemo("mock-demo");
+    var box = $("mock-body");
+    clear(box);
+    if(!State.teacher){ box.appendChild(emptyBox("선생님만 볼 수 있어요", "")); return; }
+
+    var head = el("div", "sec-head");
+    head.appendChild(el("h2", null, "모의고사"));
+    var ib = el("button", "link-btn", "＋ PDF 불러오기");
+    ib.type = "button";
+    ib.addEventListener("click", openMockImport);
+    head.appendChild(ib);
+    box.appendChild(head);
+
+    var list = mockList();
+    if(!list.length){
+      box.appendChild(emptyBox("아직 불러온 모의고사가 없어요", "전국연합학력평가 ‘성적통지표(학생용)’ PDF를 불러오면 반 전체 점수와 등급이 한 번에 들어갑니다"));
+      return;
+    }
+    var m = currentMock();
+
+    if(list.length > 1){
+      var chips = el("div", "chips");
+      chips.style.marginBottom = "12px";
+      list.forEach(function(x){
+        var c = el("button", "chip", x.title.replace(" 전국연합학력평가", "") + (x.date ? " · " + (+x.date.slice(5, 7)) + "/" + (+x.date.slice(8)) : ""));
+        c.type = "button";
+        c.setAttribute("aria-pressed", x.id === m.id ? "true" : "false");
+        c.addEventListener("click", function(){ State.mockSel = x.id; State.mockStu = ""; render(); });
+        chips.appendChild(c);
+      });
+      box.appendChild(chips);
+    }
+
+    var info = el("div", "mock-info");
+    info.appendChild(el("b", null, m.title));
+    info.appendChild(el("span", null, (m.date ? mdText(m.date) + " · " : "") + Object.keys(m.students).length + "명 응시"));
+    var del = el("button", "link-btn", "이 시험 지우기");
+    del.type = "button";
+    del.addEventListener("click", function(){ deleteMock(m); });
+    info.appendChild(del);
+    box.appendChild(info);
+
+    // 반 전체: 원점수 · 등급
+    var wrap = el("div", "gtbl-wrap");
+    var tbl = el("table", "gtbl mtbl");
+    var thead = el("thead"), hr = el("tr");
+    hr.appendChild(el("th", null, "학생"));
+    MOCK_SUBJ.forEach(function(k){ hr.appendChild(el("th", "n", k)); });
+    thead.appendChild(hr);
+    tbl.appendChild(thead);
+    var tb = el("tbody");
+    var sums = {};
+    SIDS.forEach(function(sid){
+      var s = m.students[sid];
+      var tr = el("tr");
+      tr.setAttribute("aria-selected", State.mockStu === sid ? "true" : "false");
+      var td0 = el("td", "nm", noLabel(sid) + (State.roster[sid] ? " " + State.roster[sid] : ""));
+      if(!s) td0.appendChild(el("small", null, "성적 없음"));
+      tr.appendChild(td0);
+      MOCK_SUBJ.forEach(function(k){
+        var x = s && s.subjects ? s.subjects[k] : null;
+        var td = el("td", "n");
+        if(!x){ td.textContent = "—"; tr.appendChild(td); return; }
+        td.appendChild(document.createTextNode(x.raw == null ? "—" : num(x.raw)));
+        td.appendChild(mgrBadge(x.grade));
+        tr.appendChild(td);
+        var a = sums[k] = sums[k] || {raw:0, rn:0, g:0, gn:0};
+        if(x.raw != null){ a.raw += x.raw; a.rn++; }
+        if(x.grade != null){ a.g += x.grade; a.gn++; }
+      });
+      if(s){
+        tr.addEventListener("click", function(){
+          State.mockStu = State.mockStu === sid ? "" : sid;
+          mockScroll = !!State.mockStu;
+          render();
+        });
+      }
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb);
+    var tf = el("tfoot"), fr = el("tr");
+    fr.appendChild(el("td", null, "반 평균"));
+    MOCK_SUBJ.forEach(function(k){
+      var a = sums[k];
+      var td = el("td", "n");
+      if(!a || !a.rn){ td.textContent = "—"; }
+      else {
+        td.appendChild(document.createTextNode((a.raw / a.rn).toFixed(1)));
+        td.appendChild(el("span", "mgr", a.gn ? (a.g / a.gn).toFixed(1) : "—"));
+      }
+      fr.appendChild(td);
+    });
+    tf.appendChild(fr);
+    tbl.appendChild(tf);
+    wrap.appendChild(tbl);
+    box.appendChild(wrap);
+    box.appendChild(el("p", "hint", "칸의 숫자는 원점수, 네모 안은 등급입니다. 학생 줄을 누르면 표준점수·백분위·석차·세부영역까지 모두 볼 수 있어요."));
+
+    if(State.mockStu && m.students[State.mockStu]){
+      var det = mockDetail(m, State.mockStu);
+      box.appendChild(det);
+      if(mockScroll){ mockScroll = false; setTimeout(function(){ det.scrollIntoView({block:"start", behavior:"smooth"}); }, 30); }
+    }
+  }
+
+  // 한 학생의 성적통지표 내용 전체
+  function mockDetail(m, sid){
+    var s = m.students[sid];
+    var sec = el("section", "mock-detail");
+    var h = el("div", "sec-head");
+    h.appendChild(el("h2", null, noLabel(sid) + (State.roster[sid] ? " " + State.roster[sid] : "") + " · " + m.title.replace(" 전국연합학력평가", "")));
+    var cb = el("button", "link-btn", "닫기");
+    cb.type = "button";
+    cb.addEventListener("click", function(){ State.mockStu = ""; render(); });
+    h.appendChild(cb);
+    sec.appendChild(h);
+
+    function table(heads, rows){
+      var w = el("div", "gtbl-wrap");
+      var tb = el("table", "gtbl");
+      var th = el("thead"), tr = el("tr");
+      heads.forEach(function(x, i){ tr.appendChild(el("th", i ? "n" : null, x)); });
+      th.appendChild(tr); tb.appendChild(th);
+      var body = el("tbody");
+      rows.forEach(function(r){
+        var row = el("tr");
+        r.forEach(function(c, i){
+          var td = el("td", i ? "n" : null);
+          if(c && c.nodeType) td.appendChild(c); else td.textContent = c == null ? "—" : String(c);
+          row.appendChild(td);
+        });
+        body.appendChild(row);
+      });
+      tb.appendChild(body);
+      w.appendChild(tb);
+      return w;
+    }
+
+    sec.appendChild(el("h3", null, "영역별 성적"));
+    sec.appendChild(table(["영역", "원점수", "표준점수", "백분위", "등급", "학급석차", "학교석차"],
+      MOCK_SUBJ.map(function(k){
+        var x = s.subjects[k];
+        if(!x) return [k, "미응시", null, null, null, null, null];
+        return [k, (x.raw == null ? "—" : num(x.raw)) + " / " + (x.max == null ? "—" : num(x.max)),
+                x.std, x.pct == null ? null : x.pct.toFixed(2), mgrBadge(x.grade), x.classRank, x.schoolRank];
+      })));
+    sec.appendChild(el("p", "hint", "영어·한국사는 원점수로 등급을 매겨 표준점수·백분위·석차가 없습니다."));
+
+    var hasDetail = ["국어", "수학", "영어"].some(function(k){ return s.detail && s.detail[k]; });
+    if(hasDetail){
+      sec.appendChild(el("h3", null, "세부영역별 점수"));
+      var rows = [];
+      ["국어", "수학", "영어"].forEach(function(k){
+        (s.detail[k] || []).forEach(function(d, i){
+          if(d) rows.push([(i === 0 ? k + " · " : "") + d.name, num(d.got) + " / " + num(d.max), num(d.avg)]);
+        });
+      });
+      sec.appendChild(table(["세부영역", "득점 / 배점", "전국 평균"], rows));
+    }
+
+    var rv = MOCK_SUBJ.filter(function(k){ return s.review && s.review[k]; });
+    if(rv.length){
+      sec.appendChild(el("h3", null, "보충학습이 필요한 문항 번호"));
+      rv.forEach(function(k){
+        var l = el("div", "prev-line");
+        l.appendChild(el("span", null, k));
+        l.appendChild(el("b", null, s.review[k].split(",").join(", ")));
+        sec.appendChild(l);
+      });
+    }
+
+    var cbKeys = ["국어+수학", "국어+탐구", "수학+탐구", "국어+수학+탐구", "우수탐구", "탐구 합산"]
+      .filter(function(k){ return s.combo && s.combo[k]; });
+    if(cbKeys.length){
+      sec.appendChild(el("h3", null, "합산 백분위 (기타 참고자료)"));
+      cbKeys.forEach(function(k){
+        var l = el("div", "prev-line");
+        l.appendChild(el("span", null, k));
+        l.appendChild(el("b", null, s.combo[k].pct.toFixed(2)));
+        sec.appendChild(l);
+      });
+    }
+    return sec;
+  }
+
+  function deleteMock(m){
+    if(!window.confirm("‘" + m.title + "’ 성적을 모두 지울까요?\n지우면 되살릴 수 없고, PDF를 다시 불러와야 합니다.")) return;
+    var work;
+    if(State.cloud) work = FB.db.collection("mocks").doc(m.id)["delete"]();
+    else {
+      State.mocks = State.mocks.filter(function(x){ return x.id !== m.id; });
+      lsSet("a26.mocks", State.mocks);
+      work = Promise.resolve();
+    }
+    work.then(function(){ State.mockSel = ""; State.mockStu = ""; toast("지웠습니다"); render(); })
+      ["catch"](function(e){ toast(mockErrText(e).split("\n")[0]); });
+  }
+
+  /* 모의고사 불러오기 시트 */
+  var mockReady = null;
+  function openMockImport(){
+    mockReady = null;
+    clear($("mk-preview"));
+    $("mk-preview").hidden = true;
+    $("mk-err").hidden = true;
+    $("mk-save").hidden = true;
+    $("mk-file").value = "";
+    openSheet("sheet-mock");
+  }
+  function readMockPdf(file){
+    return loadPdfJS().then(function(){
+      return file.arrayBuffer();
+    }).then(function(buf){
+      return window.pdfjsLib.getDocument({data: new Uint8Array(buf)}).promise;
+    }).then(function(doc){
+      var pages = [], chain = Promise.resolve();
+      for(var n = 1; n <= doc.numPages; n++){
+        (function(p){
+          chain = chain.then(function(){ return doc.getPage(p); })
+            .then(function(pg){ return pg.getTextContent(); })
+            .then(function(tc){ var r = parseMockPage(pdfTokens(tc.items)); if(r) pages.push(r); });
+        })(n);
+      }
+      return chain.then(function(){ return pages; });
+    });
+  }
+  $("mk-file").addEventListener("change", function(e){
+    var f = e.target.files && e.target.files[0];
+    if(!f) return;
+    var err = $("mk-err");
+    err.hidden = true;
+    var prev = $("mk-preview");
+    clear(prev);
+    prev.hidden = false;
+    prev.appendChild(el("div", "prev-line", "PDF를 읽는 중…"));
+    $("mk-save").hidden = true;
+    mockReady = null;
+
+    readMockPdf(f).then(function(pages){
+      if(!pages.length) throw new Error("empty");
+      var first = pages[0];
+      var students = {}, skipped = [], mismatch = [];
+      pages.forEach(function(r){
+        if(r.grade !== 2 || r.klass !== 6 || !r.no){
+          skipped.push((r.grade || "?") + "학년 " + (r.klass || "?") + "반 " + (r.no || "?") + "번");
+          return;
+        }
+        var sid = sidOfNo(r.no);
+        if(!STUDENT_TT[sid]){ skipped.push(r.no + "번 " + r.name); return; }
+        if(State.roster[sid] && State.roster[sid] !== r.name) mismatch.push(sid + " 명단 " + State.roster[sid] + " ↔ PDF " + r.name);
+        students[sid] = {subjects: r.subjects, detail: r.detail, review: r.review, combo: r.combo};
+      });
+      var count = Object.keys(students).length;
+      if(!count) throw new Error("nomatch");
+      var id = (first.date || TODAY) + "-g" + (first.grade || 2);
+      mockReady = {id: id, title: first.title, date: first.date, students: students};
+
+      clear(prev);
+      [["시험", first.title], ["실시일", first.date ? mdText(first.date) : "—"], ["학생", count + "명"]].forEach(function(p){
+        var l = el("div", "prev-line");
+        l.appendChild(el("span", null, p[0]));
+        l.appendChild(el("b", null, p[1]));
+        prev.appendChild(l);
+      });
+      var gradeRow = el("div", "prev-line");
+      gradeRow.appendChild(el("span", null, "반 평균 등급"));
+      gradeRow.appendChild(el("b", null, ["국어", "수학", "영어"].map(function(k){
+        var gs = Object.keys(students).map(function(s){ return (students[s].subjects[k] || {}).grade; }).filter(function(g){ return g != null; });
+        return k + " " + (gs.length ? (gs.reduce(function(a, b){ return a + b; }, 0) / gs.length).toFixed(1) : "—");
+      }).join(" · ")));
+      prev.appendChild(gradeRow);
+      var missing = SIDS.filter(function(s){ return !students[s]; }).map(noLabel);
+      if(missing.length) prev.appendChild(el("div", "warnbox", "PDF에 성적이 없는 학생(미응시일 수 있어요): " + missing.join(", ")));
+      if(skipped.length) prev.appendChild(el("div", "warnbox", "우리 반 학번으로 이어지지 않아 건너뜁니다(전학 간 학생 포함): " + skipped.join(", ")));
+      if(mismatch.length) prev.appendChild(el("div", "warnbox", "명단과 이름이 다릅니다. 그대로 저장해도 되지만 한 번 확인해 주세요.\n" + mismatch.join("\n")));
+      if(State.mocks.some(function(x){ return x.id === id; })) prev.appendChild(el("div", "warnbox", "같은 시험이 이미 저장되어 있어요. 저장하면 이 파일 내용으로 바뀝니다."));
+      $("mk-save").hidden = false;
+    })["catch"](function(ex){
+      console.warn(ex);
+      clear(prev);
+      prev.hidden = true;
+      mockReady = null;
+      var msg = "PDF를 읽지 못했습니다.";
+      if(ex && ex.message === "empty") msg = "성적통지표를 찾지 못했습니다. 전국연합학력평가 ‘성적통지표(학생용)’ PDF가 맞는지 확인해 주세요.";
+      else if(ex && ex.message === "nomatch") msg = "우리 반(2학년 6반) 학생을 찾지 못했습니다. 반 파일이 맞는지 확인해 주세요.";
+      else if(!window.pdfjsLib) msg = "PDF를 읽는 도구를 내려받지 못했습니다. 인터넷 연결을 확인하고 다시 열어 주세요.";
+      showErr("mk-err", msg);
+    });
+  });
+  $("mk-save").addEventListener("click", function(){
+    if(!mockReady) return;
+    var btn = $("mk-save");
+    btn.disabled = true;
+    btn.textContent = "저장 중…";
+    var ready = mockReady;
+    var body = {title: ready.title, date: ready.date, students: ready.students, updatedAt: Date.now()};
+    var work;
+    if(State.cloud) work = FB.db.collection("mocks").doc(ready.id).set(body);
+    else {
+      State.mocks = State.mocks.filter(function(x){ return x.id !== ready.id; });
+      State.mocks.push({id: ready.id, title: body.title, date: body.date, students: body.students, updatedAt: body.updatedAt});
+      lsSet("a26.mocks", State.mocks);
+      work = Promise.resolve();
+    }
+    work.then(function(){
+      State.mockSel = ready.id;
+      State.mockStu = "";
+      closeSheets();
+      toast(Object.keys(ready.students).length + "명 모의고사 성적을 저장했습니다");
+      render();
+    })["catch"](function(e){
+      showErr("mk-err", mockErrText(e));
+    })["then"](function(){
+      btn.disabled = false;
+      btn.textContent = "저장";
+    });
+  });
+
   /* ================= 1인 1역 =================
      공개 문서(roles/current)에는 학번만 담습니다.
      이름은 선생님 화면에서 명단(students)으로만 붙입니다. */
@@ -5041,6 +5616,7 @@ var FIREBASE_CONFIG = {
     else if(activeTab === "plan") renderPlan();
     else if(activeTab === "meet") renderMeet();
     else if(activeTab === "roles") renderRoles();
+    else if(activeTab === "mock") renderMock();
     else if(activeTab === "rec") renderRec();
   }
 

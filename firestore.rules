@@ -97,6 +97,12 @@ service cloud.firestore {
       allow read, write: if isTeacher();
     }
 
+    // ── 모의고사(전국연합학력평가) 성적: 선생님만 ─────────────────
+    // 원점수 · 표준점수 · 백분위 · 등급 · 석차. 학생 본인도 읽을 수 없습니다.
+    match /mocks/{id} {
+      allow read, write: if isTeacher();
+    }
+
     // ── 대학별 환산표: 선생님만 ───────────────────────────────────
     match /unis/{id} {
       allow read, write: if isTeacher();
