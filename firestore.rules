@@ -100,13 +100,21 @@ service cloud.firestore {
 
     // ── 면담 예약: 자리가 찼는지 여부만 공개 ──────────────────────
     // create 는 문서가 없을 때만 성공하므로 중복 예약이 서버에서 막힙니다.
+    // 선생님이 닫은 시간대(closures/{날짜_시간대})에는 예약이 만들어지지 않습니다.
     match /bookings/{id} {
       allow read: if true;
       allow create: if request.resource.data.keys().hasOnly(['date', 'slot', 'client', 'createdAt'])
                     && request.resource.data.date is string
-                    && request.resource.data.slot in ['am', 'lunch', 'pm'];
+                    && request.resource.data.slot in ['am', 'lunch', 'pm', 'pm2']
+                    && !exists(/databases/$(database)/documents/closures/$(id));
       allow delete: if true;          // 학생 본인 취소용 (README 주의사항 참고)
       allow update: if isTeacher();
+    }
+
+    // ── 면담 시간대 닫기: 누구나 읽기(‘닫힘’ 표시), 선생님만 닫고 열기 ──
+    match /closures/{id} {
+      allow read: if true;
+      allow write: if isTeacher();
     }
 
     // ── 신청자 이름 · 면담 내용: 선생님만 읽습니다 ────────────────

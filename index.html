@@ -265,6 +265,8 @@
   .slot-detail{font-size:12.5px; color:var(--ink-2); margin-top:5px; line-height:1.5; white-space:pre-wrap}
   .pill{font-size:11.5px; font-weight:700; border-radius:999px; padding:5px 11px; white-space:nowrap; border:1px solid var(--rule); color:var(--muted); background:var(--paper)}
   .pill.mine{color:var(--t-task); border-color:var(--t-task)}
+  .slot.closed{background:var(--surface-2); border-style:dashed}
+  .slot.closed .slot-name, .slot.closed .slot-time{color:var(--muted)}
   .slot-btn{border:1px solid var(--ink); background:var(--ink); color:var(--paper); border-radius:10px; padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap}
   .slot-btn.ghost{background:transparent; color:var(--t-exam); border-color:var(--rule)}
 
@@ -1286,7 +1288,8 @@ var FIREBASE_CONFIG = {
   var COUNSEL = [
     {key:"am",    label:"아침",   s:"08:20", e:"08:50"},
     {key:"lunch", label:"점심",   s:"13:20", e:"13:50"},
-    {key:"pm",    label:"방과후", s:"16:50", e:"17:20"}
+    {key:"pm",    label:"방과후 1", s:"16:50", e:"17:20"},
+    {key:"pm2",   label:"방과후 2", s:"17:30", e:"18:00"}
   ];
   var COUNSEL_MAP = {};
   COUNSEL.forEach(function(c){ COUNSEL_MAP[c.key] = c; });
@@ -1484,7 +1487,8 @@ var FIREBASE_CONFIG = {
     grades:{}, unis:[], recMode:"rec", scoreMode:"area", ipOpen:{},
     roles:null, rolesErr:"",
     mocks:[], mockSel:"", mockStu:"",
-    perm:{eventsOpen:true}, editor:null, invites:[], editors:[], permErr:""
+    perm:{eventsOpen:true}, editor:null, invites:[], editors:[], permErr:"",
+    closures:{}
   };
 
   /* ---------------- 데모(로컬) ---------------- */
@@ -1504,6 +1508,7 @@ var FIREBASE_CONFIG = {
       State.perm = lsGet("a26.perm") || {eventsOpen:true};
       State.editor = lsGet("a26.editor");
       State.invites = lsGet("a26.invites") || [];
+      State.closures = lsGet("a26.closures") || {};
       State.teacher = !!lsGet("a26.teacherMode");
     },
     save:function(){
@@ -1605,6 +1610,14 @@ var FIREBASE_CONFIG = {
         // 1인 1역 — 문서가 아직 없으면 기본 배정(DEFAULT_ROLES)을 보여 줍니다.
         FB.db.collection("roles").doc("current").onSnapshot(function(doc){
           State.roles = doc.exists ? normRoles((doc.data() || {}).list) : null;
+          render();
+        }, quiet);
+
+        // 선생님이 닫은 면담 시간대 (문서 id = 날짜_시간대)
+        FB.db.collection("closures").onSnapshot(function(snap){
+          var m = {};
+          snap.docs.forEach(function(d){ m[d.id] = true; });
+          State.closures = m;
           render();
         }, quiet);
 
@@ -2098,7 +2111,7 @@ var FIREBASE_CONFIG = {
     var mb = $("home-meet");
     clear(mb);
     var todays = COUNSEL.filter(function(c){ return bookingAt(TODAY, c.key); });
-    if(!todays.length) mb.appendChild(emptyBox("오늘 잡힌 면담이 없어요", "아침 08:20 · 점심 13:20 · 방과후 16:50"));
+    if(!todays.length) mb.appendChild(emptyBox("오늘 잡힌 면담이 없어요", "아침 08:20 · 점심 13:20 · 방과후 16:50 · 17:30"));
     else {
       var wrap = el("div", "slots");
       todays.forEach(function(c){ wrap.appendChild(slotCard(TODAY, c, bookingAt(TODAY, c.key), true)); });
@@ -2229,9 +2242,29 @@ var FIREBASE_CONFIG = {
 
   /* ---------------- 면담 ---------------- */
   var meetDate = null;
+
+  // 선생님이 닫은 시간대. 닫힌 자리는 학생이 신청할 수 없고, 서버 규칙도 막습니다.
+  function isClosed(date, slot){ return !!State.closures[bookingId(date, slot)]; }
+  function setClosed(date, slot, closed){
+    var id = bookingId(date, slot);
+    if(!State.cloud){
+      if(closed) State.closures[id] = true; else delete State.closures[id];
+      lsSet("a26.closures", State.closures);
+      render();
+      return Promise.resolve();
+    }
+    var ref = FB.db.collection("closures").doc(id);
+    return closed ? ref.set({date: date, slot: slot, createdAt: Date.now()}) : ref["delete"]();
+  }
+  function closeErrText(e){
+    if(e && e.code === "permission-denied" && State.teacher)
+      return "저장하지 못했습니다. Firestore 규칙에 면담 시간대 닫기(closures) 부분을 넣어 다시 게시해 주세요.";
+    return saveErrText(e).split("\n")[0];
+  }
   function slotCard(date, c, booking, compact){
     var mine = booking && booking.client === CLIENT;
-    var card = el("div", "slot" + (booking ? " taken" : ""));
+    var closed = !booking && isClosed(date, c.key);
+    var card = el("div", "slot" + (booking ? " taken" : "") + (closed ? " closed" : ""));
     var when = el("div", "slot-when");
     when.appendChild(el("div", "slot-name", c.label + " 면담"));
     when.appendChild(el("div", "slot-time", (compact ? "" : mdText(date) + " · ") + c.s + "–" + c.e));
@@ -2241,7 +2274,18 @@ var FIREBASE_CONFIG = {
       when.appendChild(el("div", "slot-detail", line));
     }
     card.appendChild(when);
-    if(!booking){
+    if(closed){
+      card.appendChild(el("span", "pill", "닫힘"));
+      if(State.teacher){
+        var ob = el("button", "slot-btn", "열기");
+        ob.type = "button";
+        ob.addEventListener("click", function(){
+          setClosed(date, c.key, false).then(function(){ toast(c.label + " 시간대를 열었습니다"); })
+            ["catch"](function(e){ toast(closeErrText(e)); });
+        });
+        card.appendChild(ob);
+      }
+    } else if(!booking){
       if(bookableDate(date)){
         var btn = el("button", "slot-btn", "신청");
         btn.type = "button";
@@ -2249,6 +2293,15 @@ var FIREBASE_CONFIG = {
         card.appendChild(btn);
       } else {
         card.appendChild(el("span", "pill", "당일 신청 불가"));
+      }
+      if(State.teacher){
+        var xb = el("button", "slot-btn ghost", "닫기");
+        xb.type = "button";
+        xb.addEventListener("click", function(){
+          setClosed(date, c.key, true).then(function(){ toast(c.label + " 시간대를 닫았습니다"); })
+            ["catch"](function(e){ toast(closeErrText(e)); });
+        });
+        card.appendChild(xb);
       }
     } else if(mine || State.teacher){
       card.appendChild(el("span", "pill" + (mine ? " mine" : ""), mine ? "내 예약" : "예약됨"));
@@ -2279,23 +2332,42 @@ var FIREBASE_CONFIG = {
     clear(rail);
     dates.forEach(function(ds){
       var d = parseISO(ds);
-      var taken = COUNSEL.filter(function(c){ return bookingAt(ds, c.key); }).length;
+      // 예약됐거나 닫힌 자리는 ‘남은 자리’가 아닙니다.
+      var full = COUNSEL.filter(function(c){ return bookingAt(ds, c.key) || isClosed(ds, c.key); }).length;
       var b = el("button", "dchip");
       b.type = "button";
       b.setAttribute("aria-pressed", ds === meetDate ? "true" : "false");
       b.appendChild(el("div", "d", DOW_KO[d.getDay()]));
       b.appendChild(el("div", "n", d.getDate()));
-      if(taken === COUNSEL.length) b.appendChild(el("div", "m"));
+      if(full === COUNSEL.length) b.appendChild(el("div", "m"));
       b.addEventListener("click", function(){ meetDate = ds; renderMeet(); });
       rail.appendChild(b);
     });
-    var free = COUNSEL.filter(function(c){ return !bookingAt(meetDate, c.key); }).length;
+    var free = COUNSEL.filter(function(c){ return !bookingAt(meetDate, c.key) && !isClosed(meetDate, c.key); }).length;
     $("meet-note").textContent = mdText(meetDate) + " · 남은 자리 " + free + "곳";
     var box = $("meet-slots");
     clear(box);
     COUNSEL.forEach(function(c){ box.appendChild(slotCard(meetDate, c, bookingAt(meetDate, c.key), false)); });
+    // 선생님: 그날 빈 시간대를 한 번에 닫거나 열기 (예약이 있는 자리는 그대로)
+    if(State.teacher){
+      var empty = COUNSEL.filter(function(c){ return !bookingAt(meetDate, c.key); });
+      if(empty.length){
+        var allClosed = empty.every(function(c){ return isClosed(meetDate, c.key); });
+        var day = meetDate;
+        var db = el("button", "btn", allClosed ? "이 날 모두 열기" : "이 날 빈 시간대 모두 닫기");
+        db.type = "button";
+        db.style.width = "100%";
+        db.style.marginTop = "4px";
+        db.addEventListener("click", function(){
+          Promise.all(empty.map(function(c){ return setClosed(day, c.key, !allClosed); }))
+            .then(function(){ toast(mdText(day) + (allClosed ? " 면담 시간대를 모두 열었습니다" : " 빈 시간대를 모두 닫았습니다")); })
+            ["catch"](function(e){ toast(closeErrText(e)); });
+        });
+        box.appendChild(db);
+      }
+    }
     $("meet-hint").textContent = State.teacher
-      ? "‘옮기기’로 다른 날짜·시간대로 보낼 수 있습니다. 학생 화면에는 ‘예약됨’만 보이고, 학번과 적은 내용은 선생님만 봅니다. 학생은 오늘 자리를 신청할 수 없습니다."
+      ? "‘닫기’로 그 시간대를 막을 수 있고, 학생 화면에는 ‘닫힘’으로 보입니다. 예약이 있는 자리는 ‘옮기기’나 ‘취소’로 먼저 정리해 주세요. 학생 화면에는 ‘예약됨’만 보이고, 학번과 적은 내용은 선생님만 봅니다."
       : "한 시간대에 한 명만 들어갑니다. 면담은 하루 전까지 신청해 주세요. 적은 내용은 선생님만 볼 수 있습니다.";
 
     var mineSec = $("meet-mine-sec"), mineBox = $("meet-mine");
@@ -4513,11 +4585,16 @@ var FIREBASE_CONFIG = {
       err.hidden = false;
       return;
     }
+    if(isClosed(bookTarget.date, bookTarget.slot)){
+      err.textContent = "선생님이 이 시간대를 닫았어요. 다른 시간대를 골라 주세요.";
+      err.hidden = false;
+      return;
+    }
     lsSet("a26.me", {sid:sid});
     createBooking(bookTarget.date, bookTarget.slot, sid, $("b-reason").value.trim())
       .then(function(){ closeSheets(); toast("신청했습니다"); })
       ["catch"](function(){
-        err.textContent = "방금 다른 친구가 이 시간을 예약했어요. 다른 시간대를 골라 주세요.";
+        err.textContent = "방금 다른 친구가 예약했거나 선생님이 닫은 시간대예요. 다른 시간대를 골라 주세요.";
         err.hidden = false;
         render();
       });
@@ -4556,11 +4633,12 @@ var FIREBASE_CONFIG = {
     if(!nd){ err.textContent = "날짜를 골라 주세요."; err.hidden = false; return; }
     var dw = parseISO(nd).getDay();
     if(dw === 0 || dw === 6){ err.textContent = "주말에는 면담 시간이 없습니다."; err.hidden = false; return; }
+    if(isClosed(nd, moveSlot)){ err.textContent = "그 시간대는 닫혀 있어요. 먼저 ‘열기’로 열거나 다른 시간대를 골라 주세요."; err.hidden = false; return; }
     moveBooking(moveFrom.id, nd, moveSlot)
       .then(function(){
         closeSheets();
         meetDate = nd;
-        toast(mdText(nd) + " " + COUNSEL_MAP[moveSlot].label + "으로 옮겼습니다");
+        toast(mdText(nd) + " " + COUNSEL_MAP[moveSlot].label + " 시간대로 옮겼습니다");
         render();
       })
       ["catch"](function(ex){
@@ -6144,7 +6222,7 @@ var FIREBASE_CONFIG = {
 
   if(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId){
     State.notices = []; State.events = []; State.bookings = []; State.resources = []; State.roster = {}; State.roles = null;
-    State.editor = null; State.invites = []; State.perm = {eventsOpen:true};
+    State.editor = null; State.invites = []; State.perm = {eventsOpen:true}; State.closures = {};
     State.teacher = false;
     applyWide(); render();
     initCloud()["catch"](function(e){
