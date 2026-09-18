@@ -173,6 +173,35 @@
   .ev-meta .tag.sch{background:var(--surface-2); color:var(--ink-2)}
   .cc-note{font-size:12.5px; color:var(--ink-2); background:var(--surface-2); border-radius:9px; padding:9px 11px; margin-bottom:10px; line-height:1.5}
   .cell.cc{background:var(--mark-soft); color:var(--ink-2); font-weight:600}
+
+  /* 주간 달력 — 휴대폰은 하루가 한 줄, 넓은 화면은 7칸 */
+  .week{display:grid; grid-template-columns:1fr; gap:6px}
+  .wday{display:grid; grid-template-columns:48px 1fr; gap:10px; align-items:start; text-align:left; border:1px solid var(--rule); background:var(--surface); border-radius:11px; padding:9px 10px; cursor:pointer; font-family:inherit; color:var(--ink); min-height:50px}
+  .wday[aria-selected="true"]{box-shadow:inset 0 0 0 1.5px var(--ink)}
+  .wd-h{display:flex; flex-direction:column; align-items:center; gap:1px}
+  .wd-dow{font-size:11px; font-weight:600; color:var(--muted)}
+  .wday .n{font-size:16px; font-weight:600; width:30px; height:30px; display:grid; place-items:center; border-radius:50%; color:var(--ink-2); font-variant-numeric:tabular-nums}
+  .wday.sun .n, .wday.sat .n, .wday.hol .n, .wday.sun .wd-dow, .wday.sat .wd-dow{color:var(--t-exam)}
+  .wday.today .n{background:var(--ink); color:var(--paper)}
+  .wd-b{display:flex; flex-direction:column; gap:4px; min-width:0; padding-top:3px}
+  .wd-b .holname, body.wide .wd-b .holname{text-align:left; font-size:12px; line-height:1.4; padding-left:0; white-space:normal; overflow:visible}
+  .wd-b .evbar, body.wide .wd-b .evbar{height:auto; line-height:1.35; white-space:normal; padding:4px 7px 4px 8px; font-size:12.5px; overflow-wrap:anywhere}
+  .wd-cc{font-size:11.5px; color:var(--ink-2); background:var(--mark-soft); border-radius:5px; padding:3px 7px; line-height:1.4}
+  .wd-none{color:var(--muted); font-size:12px; padding-top:5px}
+  body.wide .week{grid-template-columns:repeat(7, minmax(0, 1fr))}
+  body.wide .wday{display:flex; flex-direction:column; gap:8px; min-height:300px; padding:10px 8px}
+  body.wide .wd-h{flex-direction:row; justify-content:center; gap:6px}
+
+  /* 편집 권한 */
+  .perm-label{font-size:12px; font-weight:600; color:var(--muted); margin:2px 0 6px}
+  .grant{display:flex; align-items:center; gap:8px 12px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--rule); border-radius:11px; padding:10px 12px; margin-bottom:8px}
+  .grant-who{font-weight:700; font-size:14px; min-width:60px}
+  .grant-scopes{display:flex; gap:5px; flex-wrap:wrap; flex:1}
+  .grant-scopes span{font-size:11.5px; font-weight:600; border-radius:999px; padding:3px 9px; background:var(--surface-2); color:var(--ink-2)}
+  .grant-meta{font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums}
+  .grant-meta b{font-family:ui-monospace, Menlo, Consolas, monospace; color:var(--ink); letter-spacing:.08em}
+  .grant .tools{margin:0}
+  .codebox{font-family:ui-monospace, Menlo, Consolas, monospace; font-size:34px; font-weight:700; letter-spacing:.25em; text-align:center; padding:18px 0; border:1.5px dashed var(--rule); border-radius:12px; margin:6px 0 12px; background:var(--surface); color:var(--ink)}
   .day.out{visibility:hidden}
   .day.today .n{background:var(--ink); color:var(--paper); border-radius:50%; font-weight:600}
   .day[aria-selected="true"]{background:var(--surface-2); box-shadow:inset 0 0 0 1.5px var(--ink)}
@@ -683,7 +712,8 @@
     <div id="view-plan" hidden>
       <section style="border-top:0">
         <div class="seg" id="plan-seg">
-          <button type="button" data-mode="cal" aria-pressed="true">달력</button>
+          <button type="button" data-mode="cal" aria-pressed="true">월간</button>
+          <button type="button" data-mode="week" aria-pressed="false">주간</button>
           <button type="button" data-mode="list" aria-pressed="false">목록</button>
         </div>
         <div id="plan-cal">
@@ -695,10 +725,11 @@
               <button type="button" id="cal-next" aria-label="다음 달">&rsaquo;</button>
             </div>
           </div>
-          <div class="dow-row">
+          <div class="dow-row" id="cal-dow">
             <span class="sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="sat">토</span>
           </div>
           <div class="cal-grid" id="cal-grid"></div>
+          <div class="week" id="cal-week" hidden></div>
           <div class="day-panel">
             <div class="day-panel-head">
               <h3 id="day-panel-title">9월 8일</h3>
@@ -746,6 +777,7 @@
         <div class="roles" id="roles-list"></div>
         <div id="roles-left"></div>
         <p class="hint" id="roles-hint"></p>
+        <div id="perm-box"></div>
       </section>
     </div>
 
@@ -783,10 +815,24 @@
     <button type="button" class="login-opt" id="lg-pick-student">
       <b>학번으로 보기</b><span>2학년 6반 학생 — 내 시간표와 면담 예약</span>
     </button>
+    <button type="button" class="login-opt" id="lg-pick-code">
+      <b>편집 권한 코드 넣기</b><span>선생님께 코드를 받은 학생 — 일정·전달사항 관리</span>
+    </button>
     <button type="button" class="login-opt" id="lg-pick-teacher">
       <b>선생님 로그인</b><span>전달사항·자료실·일정 관리와 학생 기록</span>
     </button>
   </div>
+  <form id="lg-code" hidden>
+    <div class="field">
+      <label for="l-code">선생님께 받은 코드 여섯 자리</label>
+      <input type="text" id="l-code" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false" style="text-transform:uppercase; letter-spacing:.2em">
+    </div>
+    <p class="form-err" id="lg-code-err" hidden></p>
+    <div class="sheet-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button type="submit" class="btn primary">권한 받기</button>
+    </div>
+  </form>
   <form id="lg-student" hidden>
     <div class="field">
       <label for="l-sid">학번 다섯 자리</label>
@@ -1123,6 +1169,35 @@
   </div>
 </div>
 
+<!-- 편집 권한 주기 -->
+<div class="sheet" id="sheet-grant" role="dialog" aria-modal="true" aria-labelledby="gr-title">
+  <div class="grabber"></div>
+  <h2 id="gr-title">편집 권한 주기</h2>
+  <div id="gr-pick">
+    <p class="lead">학생과 권한을 고르면 코드가 만들어집니다. 그 학생에게만 코드를 알려 주세요.</p>
+    <div class="field">
+      <label>학생</label>
+      <div class="pick-grid" id="gr-students"></div>
+    </div>
+    <div class="field">
+      <label>권한</label>
+      <div id="gr-scopes"></div>
+    </div>
+    <p class="form-err" id="gr-err" hidden></p>
+    <div class="sheet-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button type="button" class="btn primary" id="gr-save">코드 만들기</button>
+    </div>
+  </div>
+  <div id="gr-done" hidden>
+    <div class="codebox" id="gr-code"></div>
+    <p class="lead" id="gr-done-lead"></p>
+    <div class="sheet-actions">
+      <button type="button" class="btn primary" data-close>확인</button>
+    </div>
+  </div>
+</div>
+
 <!-- 1인 1역: 자리 채우기 -->
 <div class="sheet" id="sheet-pick" role="dialog" aria-modal="true" aria-labelledby="pk-title">
   <div class="grabber"></div>
@@ -1408,7 +1483,8 @@ var FIREBASE_CONFIG = {
     roster:{}, entries:[], entriesFor:"", recSel:"",
     grades:{}, unis:[], recMode:"rec", scoreMode:"area", ipOpen:{},
     roles:null, rolesErr:"",
-    mocks:[], mockSel:"", mockStu:""
+    mocks:[], mockSel:"", mockStu:"",
+    perm:{eventsOpen:true}, editor:null, invites:[], editors:[], permErr:""
   };
 
   /* ---------------- 데모(로컬) ---------------- */
@@ -1425,6 +1501,9 @@ var FIREBASE_CONFIG = {
       var lr = lsGet("a26.roles");
       State.roles = lr ? normRoles(lr) : null;
       State.mocks = lsGet("a26.mocks") || [];
+      State.perm = lsGet("a26.perm") || {eventsOpen:true};
+      State.editor = lsGet("a26.editor");
+      State.invites = lsGet("a26.invites") || [];
       State.teacher = !!lsGet("a26.teacherMode");
     },
     save:function(){
@@ -1468,10 +1547,14 @@ var FIREBASE_CONFIG = {
         State.cloud = true;
 
         FB.auth.onAuthStateChanged(function(u){
+          // 익명 로그인은 ‘편집 권한’을 받은 학생 기기입니다. 선생님이 아닙니다.
+          var isT = !!u && !u.isAnonymous;
           State.user = u;
-          State.teacher = !!u;
-          if(u) watchRoster();
+          State.teacher = isT;
+          watchEditor(u && u.isAnonymous ? u.uid : null);
+          if(isT) watchRoster();
           else {
+            State.invites = []; State.editors = [];
             if(unsubRoster){ unsubRoster(); unsubRoster = null; }
             if(unsubEntries){ unsubEntries(); unsubEntries = null; }
             State.roster = {}; State.details = {}; State.entries = []; State.entriesFor = "";
@@ -1509,6 +1592,13 @@ var FIREBASE_CONFIG = {
                     photos: Array.isArray(v.photos) ? v.photos : [],
                     createdAt:v.createdAt||0, updatedAt:v.updatedAt||0};
           });
+          render();
+        }, quiet);
+
+        // 편집 권한 설정 — 문서가 없으면 ‘모든 학생이 일정을 올릴 수 있음’
+        FB.db.collection("config").doc("perm").onSnapshot(function(doc){
+          var v = doc.exists ? (doc.data() || {}) : {};
+          State.perm = {eventsOpen: v.eventsOpen !== false};
           render();
         }, quiet);
 
@@ -1555,6 +1645,20 @@ var FIREBASE_CONFIG = {
                 topN: v.topN || 0, bestOf: !!v.bestOf, achRank: v.achRank || null,
                 past: Array.isArray(v.past) ? v.past : [], source: v.source || ""};
       }).sort(function(a,b){ return a.name < b.name ? -1 : 1; });
+      render();
+    }, quiet);
+    FB.db.collection("invites").onSnapshot(function(snap){
+      State.invites = snap.docs.map(function(d){
+        var v = d.data() || {};
+        return {code:d.id, sid:v.sid || "", scopes:v.scopes || [], createdAt:v.createdAt || 0};
+      });
+      render();
+    }, quiet);
+    FB.db.collection("editors").onSnapshot(function(snap){
+      State.editors = snap.docs.map(function(d){
+        var v = d.data() || {};
+        return {uid:d.id, sid:v.sid || "", scopes:v.scopes || [], code:v.code || ""};
+      });
       render();
     }, quiet);
     FB.db.collection("mocks").onSnapshot(function(snap){
@@ -1728,7 +1832,7 @@ var FIREBASE_CONFIG = {
     box.appendChild(b);
   }
   function visibleNotices(){
-    return State.notices.filter(function(n){ return State.teacher || !n.hidden; })
+    return State.notices.filter(function(n){ return canNotices() || !n.hidden; })
       .sort(function(a,b){
         if(!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
         return (b.createdAt||0) - (a.createdAt||0);
@@ -1776,17 +1880,21 @@ var FIREBASE_CONFIG = {
     head.appendChild(el("div", "notice-date", (d.getMonth()+1) + "/" + d.getDate()));
     card.appendChild(head);
     if(n.body) card.appendChild(el("div", "notice-body", n.body));
-    if(State.teacher){
+    // 선생님과 ‘전달사항 쓰기’ 권한을 받은 학생. 지우기는 선생님만.
+    if(canNotices()){
       var tools = el("div", "tools");
       tools.appendChild(toolBtn("수정", function(){ openNotice(n); }));
       tools.appendChild(toolBtn(n.hidden ? "다시 올리기" : "내리기", function(){
         put("notices", n.id, {title:n.title, body:n.body, pinned:n.pinned, hidden:!n.hidden, createdAt:n.createdAt}, "notices")
-          .then(function(){ toast(n.hidden ? "다시 올렸습니다" : "내렸습니다"); });
+          .then(function(){ toast(n.hidden ? "다시 올렸습니다" : "내렸습니다"); })
+          ["catch"](function(e){ toast(saveErrText(e).split("\n")[0]); });
       }));
-      tools.appendChild(toolBtn("삭제", function(){
-        if(!window.confirm("이 전달사항을 지울까요?")) return;
-        drop("notices", n.id, "notices").then(function(){ toast("지웠습니다"); });
-      }, true));
+      if(State.teacher){
+        tools.appendChild(toolBtn("삭제", function(){
+          if(!window.confirm("이 전달사항을 지울까요?")) return;
+          drop("notices", n.id, "notices").then(function(){ toast("지웠습니다"); });
+        }, true));
+      }
       card.appendChild(tools);
     }
     return card;
@@ -1840,7 +1948,7 @@ var FIREBASE_CONFIG = {
   function eventRow(ev, opts){
     opts = opts || {};
     var tp = TYPE_MAP[ev.type] || TYPE_MAP.etc;
-    var row = el("div", "ev" + (ev.builtin ? " builtin" : " tap"));
+    var row = el("div", "ev" + ((ev.builtin || !eventsWritable()) ? " builtin" : " tap"));
     row.style.setProperty("--tc", tp.color);
     var body = el("div", "ev-body");
     body.appendChild(el("div", "ev-title", ev.title));
@@ -1877,7 +1985,7 @@ var FIREBASE_CONFIG = {
       if(n < 0 && ev.end && diffDays(ev.end, TODAY) >= 0) n = 0;   // 시험 기간 중에는 D-DAY
       row.appendChild(el("div", "ev-dday" + (n < 0 ? " past" : ""), ddayText(n)));
     }
-    if(ev.builtin) return row;   // 학사일정은 고칠 수 없습니다
+    if(ev.builtin || !eventsWritable()) return row;   // 학사일정, 또는 일정을 고칠 권한이 없을 때
     row.tabIndex = 0;
     row.setAttribute("role", "button");
     row.addEventListener("click", function(){ openEvent(ev); });
@@ -2207,27 +2315,94 @@ var FIREBASE_CONFIG = {
   }
 
   /* ---------------- 일정 ---------------- */
-  var planMode = "cal", calCursor = new Date(today().getFullYear(), today().getMonth(), 1),
+  // 월간 / 주간 / 목록 — 마지막에 보던 모양을 기억합니다.
+  var planMode = ["cal", "week", "list"].indexOf(lsGet("a26.planMode")) >= 0 ? lsGet("a26.planMode") : "cal",
+      calCursor = new Date(today().getFullYear(), today().getMonth(), 1),
       calSelected = TODAY, listFilter = "all";
 
   function renderPlan(){
-    $("plan-cal").hidden = planMode !== "cal";
+    $("plan-cal").hidden = planMode === "list";
     $("plan-list").hidden = planMode !== "list";
     Array.prototype.forEach.call($("plan-seg").children, function(b){
       b.setAttribute("aria-pressed", b.getAttribute("data-mode") === planMode ? "true" : "false");
     });
-    if(planMode === "cal") renderCal(); else { renderFilters(); renderList(); }
+    if(planMode !== "list") renderCal(); else { renderFilters(); renderList(); }
   }
-  function renderCal(){
-    $("cal-title").textContent = calCursor.getFullYear() + "년 " + (calCursor.getMonth()+1) + "월";
-    var grid = $("cal-grid");
-    clear(grid);
+  // 날짜 → 그날 일정. 기간이 있는 학사일정(정기시험)은 그 기간의 모든 날짜에 넣습니다.
+  function eventsByDate(){
     var byDate = {};
-    // 기간이 있는 학사일정(정기시험)은 그 기간의 모든 날짜에 표시합니다.
     allEvents().forEach(function(e){
       if(!e.end){ (byDate[e.date] = byDate[e.date] || []).push(e); return; }
       for(var k = e.date; k <= e.end; k = iso(addDays(parseISO(k), 1))) (byDate[k] = byDate[k] || []).push(e);
     });
+    return byDate;
+  }
+  function sortEvs(list){
+    return (list || []).slice().sort(function(a, b){
+      var ta = TYPES.indexOf(TYPE_MAP[a.type] || TYPE_MAP.etc), tb = TYPES.indexOf(TYPE_MAP[b.type] || TYPE_MAP.etc);
+      return ta !== tb ? ta - tb : (a.createdAt || 0) - (b.createdAt || 0);
+    });
+  }
+  function renderCal(){
+    var week = planMode === "week";
+    var byDate = eventsByDate();
+    $("cal-grid").hidden = week;
+    $("cal-dow").hidden = week;
+    $("cal-week").hidden = !week;
+    $("cal-prev").setAttribute("aria-label", week ? "이전 주" : "이전 달");
+    $("cal-next").setAttribute("aria-label", week ? "다음 주" : "다음 달");
+    if(week) renderWeek(byDate); else renderMonth(byDate);
+    renderDayPanel(byDate);
+  }
+
+  // 주간: 고른 날이 들어 있는 한 주(일~토). 칸이 넉넉해서 제목을 다 보여 줍니다.
+  function weekCc(key){
+    var plan = CC_PLAN[key];
+    if(!plan) return "";
+    if(plan.all) return plan.all;
+    function lab(v){ return v.charAt(0) === "@" ? DAY_LABEL[v.slice(1)] + "요일 수업" : v; }
+    if(plan[5] && plan[5] === plan[6]) return "창체 5·6교시 " + lab(plan[5]);
+    return "창체 " + Object.keys(plan).sort().map(function(p){ return p + "교시 " + lab(plan[p]); }).join(" · ");
+  }
+  function renderWeek(byDate){
+    var sel = parseISO(calSelected);
+    var start = addDays(sel, -sel.getDay()), end = addDays(start, 6);
+    $("cal-title").textContent = (start.getMonth()+1) + "월 " + start.getDate() + "일 – " +
+      (end.getMonth() !== start.getMonth() ? (end.getMonth()+1) + "월 " : "") + end.getDate() + "일";
+    var box = $("cal-week");
+    clear(box);
+    for(var i = 0; i < 7; i++){
+      var d = addDays(start, i), key = iso(d), hol = holidayOf(key);
+      var col = el("button", "wday" + redDayClass(d, key) + (key === TODAY ? " today" : ""));
+      col.type = "button";
+      col.setAttribute("aria-selected", key === calSelected ? "true" : "false");
+      var head = el("div", "wd-h");
+      head.appendChild(el("span", "wd-dow", DOW_KO[d.getDay()]));
+      head.appendChild(el("span", "n", d.getDate()));
+      col.appendChild(head);
+      var body = el("div", "wd-b");
+      if(hol) body.appendChild(el("div", "holname", hol));
+      var cc = weekCc(key);
+      if(cc) body.appendChild(el("div", "wd-cc", cc));
+      var evs = sortEvs(byDate[key]);
+      evs.forEach(function(e){
+        var bar = el("span", "evbar", e.title);
+        bar.style.setProperty("--dc", (TYPE_MAP[e.type] || TYPE_MAP.etc).color);
+        body.appendChild(bar);
+      });
+      if(!hol && !cc && !evs.length) body.appendChild(el("div", "wd-none", "—"));
+      col.appendChild(body);
+      col.setAttribute("aria-label", (d.getMonth()+1) + "월 " + d.getDate() + "일 " + DOW_KO[d.getDay()] + "요일" +
+        (hol ? ", " + hol : "") + (evs.length ? ", 일정 " + evs.length + "개" : ""));
+      (function(k){ col.addEventListener("click", function(){ calSelected = k; renderCal(); }); })(key);
+      box.appendChild(col);
+    }
+  }
+
+  function renderMonth(byDate){
+    $("cal-title").textContent = calCursor.getFullYear() + "년 " + (calCursor.getMonth()+1) + "월";
+    var grid = $("cal-grid");
+    clear(grid);
     var first = new Date(calCursor.getFullYear(), calCursor.getMonth(), 1);
     var start = addDays(first, -first.getDay());
     for(var i = 0; i < 42; i++){
@@ -2249,10 +2424,7 @@ var FIREBASE_CONFIG = {
         cell.appendChild(el("div", "holname", short));
       }
       // 그날 일정의 제목을 막대로. 칸이 모자라면 마지막 줄을 ‘+N’ 으로 줄입니다.
-      var evs = (byDate[key] || []).slice().sort(function(a, b){
-        var ta = TYPES.indexOf(TYPE_MAP[a.type] || TYPE_MAP.etc), tb = TYPES.indexOf(TYPE_MAP[b.type] || TYPE_MAP.etc);
-        return ta !== tb ? ta - tb : (a.createdAt || 0) - (b.createdAt || 0);
-      });
+      var evs = sortEvs(byDate[key]);
       var bars = el("div", "evbars");
       var cap = (document.body.classList.contains("wide") ? 4 : 2) - (hol ? 1 : 0);
       var shown = evs.length > cap ? cap - 1 : evs.length;
@@ -2267,6 +2439,10 @@ var FIREBASE_CONFIG = {
       (function(k){ cell.addEventListener("click", function(){ calSelected = k; renderCal(); }); })(key);
       grid.appendChild(cell);
     }
+  }
+
+  // 달력 아래: 고른 날의 설명과 일정
+  function renderDayPanel(byDate){
     var sd = parseISO(calSelected);
     $("day-panel-title").textContent = (sd.getMonth()+1) + "월 " + sd.getDate() + "일 (" + DOW_KO[sd.getDay()] + ")";
     var n = diffDays(calSelected, TODAY);
@@ -2276,12 +2452,14 @@ var FIREBASE_CONFIG = {
     clear(box);
     var cc = ccSummary(calSelected);
     if(cc) box.appendChild(el("div", "cc-note", cc));
-    var list = byDate[calSelected] || [];
+    var list = sortEvs(byDate[calSelected]);
     if(!list.length){
-      var add = el("button", "btn", "이 날에 일정 추가");
-      add.type = "button"; add.style.width = "100%";
-      add.addEventListener("click", function(){ openEvent({date:calSelected}); });
-      box.appendChild(add);
+      if(eventsWritable()){
+        var add = el("button", "btn", "이 날에 일정 추가");
+        add.type = "button"; add.style.width = "100%";
+        add.addEventListener("click", function(){ openEvent({date:calSelected}); });
+        box.appendChild(add);
+      } else box.appendChild(emptyBox("이 날은 일정이 없어요", ""));
     } else {
       var wrap = el("div", "events");
       list.forEach(function(ev){ wrap.appendChild(eventRow(ev, {hideDate:true, hideDday:true})); });
@@ -3034,13 +3212,13 @@ var FIREBASE_CONFIG = {
     var fab = $("fab");
     clear(fab);
     var label = null, action = null;
-    // 일정은 학생도 올릴 수 있습니다.
+    // 일정은 학생도 올릴 수 있습니다(선생님이 ‘권한 받은 학생만’으로 바꾸지 않았다면).
     if(activeTab === "plan"){
-      label = "일정 추가"; action = function(){ openEvent({date: planMode === "cal" ? calSelected : TODAY}); };
+      if(eventsWritable()){ label = "일정 추가"; action = function(){ openEvent({date: planMode !== "list" ? calSelected : TODAY}); }; }
+    } else if(canNotices() && (activeTab === "home" || (activeTab === "notice" && noticeMode === "notice"))){
+      label = "전달사항 쓰기"; action = function(){ openNotice(null); };
     } else if(State.teacher){
-      if(activeTab === "home" || (activeTab === "notice" && noticeMode === "notice")){
-        label = "전달사항 쓰기"; action = function(){ openNotice(null); };
-      } else if(activeTab === "notice" && noticeMode === "res"){
+      if(activeTab === "notice" && noticeMode === "res"){
         label = "자료 올리기"; action = function(){ openRes(null); };
       } else if(activeTab === "mock"){
         label = "모의고사 불러오기"; action = function(){ openMockImport(); };
@@ -3056,9 +3234,10 @@ var FIREBASE_CONFIG = {
   }
   function renderRole(){
     var btn = $("role-btn");
-    var on = State.teacher || !!State.sid;
+    var on = State.teacher || !!State.sid || !!State.editor;
     btn.classList.toggle("on", on);
-    $("role-label").textContent = State.teacher ? "선생님" : (State.sid || "로그인");
+    $("role-label").textContent = State.teacher ? "선생님"
+      : (State.editor ? (State.editor.sid || State.sid || "학생") + " · 편집" : (State.sid || "로그인"));
   }
   function applyWide(){
     document.body.classList.toggle("wide", State.teacher && window.innerWidth >= 1024);
@@ -3862,7 +4041,7 @@ var FIREBASE_CONFIG = {
   function closeSheets(){
     closeDatePop();
     $("scrim").classList.remove("open");
-    ["sheet-login","sheet-notice","sheet-res","sheet-event","sheet-book","sheet-move","sheet-entry","sheet-roster","sheet-import","sheet-uni","sheet-pick","sheet-role","sheet-mock"]
+    ["sheet-login","sheet-notice","sheet-res","sheet-event","sheet-book","sheet-move","sheet-entry","sheet-roster","sheet-import","sheet-uni","sheet-pick","sheet-role","sheet-mock","sheet-grant"]
       .forEach(function(id){ $(id).classList.remove("open"); });
   }
   $("scrim").addEventListener("click", closeSheets);
@@ -3884,18 +4063,30 @@ var FIREBASE_CONFIG = {
     $("lg-choose").hidden = !!which;
     $("lg-student").hidden = which !== "student";
     $("lg-teacher").hidden = which !== "teacher";
+    $("lg-code").hidden = which !== "code";
     $("lg-sid-err").hidden = true;
     $("lg-err").hidden = true;
-    $("lg-title").textContent = which === "teacher" ? "선생님 로그인" : (which === "student" ? "학번 넣기" : "로그인");
+    $("lg-code-err").hidden = true;
+    $("lg-title").textContent = which === "teacher" ? "선생님 로그인"
+      : (which === "student" ? "학번 넣기" : (which === "code" ? "편집 권한 코드" : "로그인"));
     if(which === "student") $("l-sid").value = State.sid || "";
+    if(which === "code") $("l-code").value = "";
     openSheet("sheet-login");
     if(which === "student") setTimeout(function(){ $("l-sid").focus(); }, 280);
+    if(which === "code") setTimeout(function(){ $("l-code").focus(); }, 280);
   }
   $("role-btn").addEventListener("click", function(){
     if(State.teacher){
       if(!window.confirm("로그아웃할까요?")) return;
       if(State.cloud) FB.auth.signOut();
       else { State.teacher = false; lsSet("a26.teacherMode", false); applyWide(); switchTab("home"); }
+      return;
+    }
+    if(State.editor){
+      var what = (State.editor.scopes || []).map(function(id){ return SCOPE_MAP[id] ? SCOPE_MAP[id].label : id; }).join(", ");
+      if(window.confirm("이 기기에 ‘" + what + "’ 권한이 있습니다.\n권한을 내려놓을까요? 다시 쓰려면 코드를 다시 넣어야 합니다.")){
+        releaseEditor().then(function(){ toast("편집 권한을 내려놓았습니다"); });
+      }
       return;
     }
     if(State.sid){
@@ -3908,6 +4099,21 @@ var FIREBASE_CONFIG = {
   });
   $("lg-pick-student").addEventListener("click", function(){ openLogin("student"); });
   $("lg-pick-teacher").addEventListener("click", function(){ openLogin("teacher"); });
+  $("lg-pick-code").addEventListener("click", function(){ openLogin("code"); });
+  $("lg-code").addEventListener("submit", function(e){
+    e.preventDefault();
+    $("lg-code-err").hidden = true;
+    var btn = $("lg-code").querySelector(".btn.primary");
+    btn.disabled = true;
+    redeemCode($("l-code").value).then(function(ed){
+      if(ed && ed.sid){ State.sid = ed.sid; lsSet("a26.sid", ed.sid); }
+      closeSheets();
+      toast("권한을 받았어요: " + (ed.scopes || []).map(function(id){ return SCOPE_MAP[id] ? SCOPE_MAP[id].label : id; }).join(", "));
+      render();
+    })["catch"](function(ex){
+      showErr("lg-code-err", redeemErrText(ex));
+    })["then"](function(){ btn.disabled = false; });
+  });
 
   $("lg-student").addEventListener("submit", function(e){
     e.preventDefault();
@@ -3951,7 +4157,7 @@ var FIREBASE_CONFIG = {
     $("n-title").value = n ? n.title : "";
     $("n-body").value = n ? n.body : "";
     $("n-pin").checked = n ? !!n.pinned : false;
-    $("n-delete").hidden = !n;
+    $("n-delete").hidden = !n || !State.teacher;   // 지우기는 선생님만
     $("nt-err").hidden = true;
     openSheet("sheet-notice");
     if(!n) setTimeout(function(){ $("n-title").focus(); }, 280);
@@ -4203,10 +4409,12 @@ var FIREBASE_CONFIG = {
     setDate("f-date", ev.date || TODAY);
     $("f-subject").value = ev.subject || "";
     $("f-memo").value = ev.memo || "";
-    $("f-delete").hidden = !editingEvent || !State.teacher;   // 삭제는 선생님만
+    $("f-delete").hidden = !editingEvent || !canEvents();   // 삭제는 선생님과 ‘일정 관리’ 권한 학생
     $("ev-lead").textContent = State.teacher
       ? "수행평가·지필고사·학교 행사 일정을 학생들에게 알립니다."
-      : "반 친구들이 같이 보는 일정입니다. 잘못 올렸으면 다시 눌러 고칠 수 있어요. 지우는 건 선생님만 됩니다.";
+      : (canEvents()
+        ? "일정 관리 권한이 있어요. 반 일정을 올리고 고치고 지울 수 있습니다."
+        : "반 친구들이 같이 보는 일정입니다. 잘못 올렸으면 다시 눌러 고칠 수 있어요. 지우는 건 선생님만 됩니다.");
     $("ev-err").hidden = true;
     renderTypePicks();
     var dl = $("subject-list");
@@ -4252,7 +4460,7 @@ var FIREBASE_CONFIG = {
         type:sheetType, title:title, date:getDate("f-date"),
         subject:$("f-subject").value.trim(), memo:$("f-memo").value.trim(),
         photos: photos,
-        by: State.teacher ? "선생님" : (State.sid || "학생"),
+        by: State.teacher ? "선생님" : ((State.editor && State.editor.sid) || State.sid || "학생"),
         createdAt: was ? (was.createdAt || Date.now()) : Date.now(),
         updatedAt: Date.now()
       }, "events");
@@ -4676,6 +4884,288 @@ var FIREBASE_CONFIG = {
       toast(rows.length + "명 등록했습니다");
       render();
     })["catch"](function(err){ showErr("ro-err", saveErrText(err)); });
+  });
+
+  /* ================= 편집 권한 =================
+     선생님이 고른 학생에게 ‘권한 코드’를 줍니다. 학생이 자기 기기에서 코드를 넣으면
+     그 기기(Firebase 익명 로그인)에만 권한이 붙고, Firestore 규칙이 서버에서 확인합니다.
+     학번만으로는 권한이 생기지 않습니다(학번은 누구나 넣어 볼 수 있으니까요). */
+  var SCOPES = [
+    {id:"events",  label:"일정 관리",     desc:"학급 일정 올리기·고치기·지우기"},
+    {id:"notices", label:"전달사항 쓰기", desc:"전달사항 올리기·고치기·내리기 (지우기는 선생님만)"}
+  ];
+  var SCOPE_MAP = {};
+  SCOPES.forEach(function(s){ SCOPE_MAP[s.id] = s; });
+  function hasScope(id){ return !!(State.editor && State.editor.scopes && State.editor.scopes.indexOf(id) >= 0); }
+  function canEvents(){ return State.teacher || hasScope("events"); }
+  function canNotices(){ return State.teacher || hasScope("notices"); }
+  // 일정 올리기·고치기: 선생님, ‘일정 관리’ 권한 학생, 또는 ‘모든 학생’ 설정일 때 누구나
+  function eventsWritable(){ return canEvents() || State.perm.eventsOpen !== false; }
+
+  var unsubEditor = null;
+  function watchEditor(uid){
+    if(unsubEditor){ unsubEditor(); unsubEditor = null; }
+    if(!uid){ State.editor = null; return; }
+    unsubEditor = FB.db.collection("editors").doc(uid).onSnapshot(function(doc){
+      var v = doc.exists ? (doc.data() || {}) : null;
+      State.editor = v ? {sid: v.sid || "", scopes: v.scopes || [], code: v.code || ""} : null;   // 선생님이 회수하면 바로 사라짐
+      render();
+    }, function(e){ quiet(e); State.editor = null; render(); });
+  }
+
+  var CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";   // 헷갈리는 O·0·I·1 은 뺐습니다
+  function newCode(){
+    var s = "";
+    for(var i = 0; i < 6; i++) s += CODE_CHARS.charAt(randInt(CODE_CHARS.length));
+    return s;
+  }
+
+  // 학생 기기: 코드를 넣어 권한 받기
+  function redeemCode(raw){
+    var code = String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if(code.length !== 6) return Promise.reject(new Error("format"));
+    if(!State.cloud){
+      var inv = (lsGet("a26.invites") || []).filter(function(x){ return x.code === code; })[0];
+      if(!inv) return Promise.reject(new Error("nocode"));
+      State.editor = {sid: inv.sid, scopes: inv.scopes.slice(), code: code};
+      lsSet("a26.editor", State.editor);
+      return Promise.resolve(State.editor);
+    }
+    var user = FB.auth.currentUser, inv2 = null;
+    if(user && !user.isAnonymous) return Promise.reject(new Error("teacher"));
+    var start = user ? Promise.resolve(user) : FB.auth.signInAnonymously().then(function(c){ return c.user; });
+    return start.then(function(u){
+      user = u;
+      return FB.db.collection("invites").doc(code).get();
+    }).then(function(doc){
+      if(!doc.exists) throw new Error("nocode");
+      inv2 = doc.data() || {};
+      // 이 기기에 예전 권한이 있으면 먼저 지우고 새로 받습니다.
+      return FB.db.collection("editors").doc(user.uid)["delete"]()["catch"](function(){});
+    }).then(function(){
+      return FB.db.collection("editors").doc(user.uid).set({code: code, sid: inv2.sid, scopes: inv2.scopes, createdAt: Date.now()});
+    }).then(function(){
+      State.editor = {sid: inv2.sid, scopes: inv2.scopes, code: code};
+      return State.editor;
+    });
+  }
+  function redeemErrText(ex){
+    var c = (ex && (ex.code || ex.message)) || "";
+    if(c === "format") return "코드는 영어와 숫자 여섯 자리예요.";
+    if(c === "nocode" || c === "permission-denied") return "코드가 맞지 않거나 회수된 코드예요. 선생님께 다시 확인해 주세요.";
+    if(c === "teacher") return "선생님 계정으로 로그인되어 있어요. 학생 휴대폰에서 넣어 주세요.";
+    if(c === "auth/operation-not-allowed" || c === "auth/admin-restricted-operation")
+      return "아직 편집 권한 기능이 켜져 있지 않아요. 선생님께 말씀드려 주세요.\n(Firebase → Authentication → 로그인 방법 → 익명 사용 설정)";
+    if(c === "unavailable" || c === "auth/network-request-failed") return "인터넷에 연결되지 않았어요. 다시 시도해 주세요.";
+    return "권한을 받지 못했습니다." + (c ? " (" + c + ")" : "");
+  }
+  // 학생 기기: 권한 내려놓기
+  function releaseEditor(){
+    if(!State.cloud){ State.editor = null; lsSet("a26.editor", null); render(); return Promise.resolve(); }
+    var u = FB.auth.currentUser;
+    var work = (u && u.isAnonymous) ? FB.db.collection("editors").doc(u.uid)["delete"]()["catch"](function(){}) : Promise.resolve();
+    return work.then(function(){
+      State.editor = null;
+      if(u && u.isAnonymous) return FB.auth.signOut();
+    }).then(function(){ render(); });
+  }
+
+  // 선생님: 권한 주기·바꾸기·회수, 일정 올리기 범위
+  function permErrText(e){
+    if(e && e.code === "permission-denied" && State.teacher){
+      var who = (State.user && State.user.email) || "(로그인 정보 없음)";
+      return "저장하지 못했습니다. Firestore 규칙에 편집 권한(invites · editors · config) 부분을 넣어 다시 게시해 주세요.\n로그인한 계정: " + who;
+    }
+    return saveErrText(e);
+  }
+  function saveGrant(sid, scopes){
+    var existing = State.invites.filter(function(x){ return x.sid === sid; })[0];
+    var code = existing ? existing.code : newCode();
+    var createdAt = existing ? (existing.createdAt || Date.now()) : Date.now();
+    if(!State.cloud){
+      var list = (lsGet("a26.invites") || []).filter(function(x){ return x.sid !== sid; });
+      list.push({code: code, sid: sid, scopes: scopes, createdAt: createdAt});
+      lsSet("a26.invites", list);
+      State.invites = list;
+      if(State.editor && State.editor.sid === sid){ State.editor.scopes = scopes.slice(); lsSet("a26.editor", State.editor); }
+      render();
+      return Promise.resolve(code);
+    }
+    var batch = FB.db.batch();
+    batch.set(FB.db.collection("invites").doc(code), {sid: sid, scopes: scopes, createdAt: createdAt});
+    // 이미 코드를 넣은 기기에도 바뀐 권한을 바로 적용
+    State.editors.filter(function(e){ return e.sid === sid; }).forEach(function(e){
+      batch.update(FB.db.collection("editors").doc(e.uid), {scopes: scopes});
+    });
+    return batch.commit().then(function(){ return code; });
+  }
+  function revokeGrant(sid){
+    if(!State.cloud){
+      State.invites = (lsGet("a26.invites") || []).filter(function(x){ return x.sid !== sid; });
+      lsSet("a26.invites", State.invites);
+      if(State.editor && State.editor.sid === sid){ State.editor = null; lsSet("a26.editor", null); }
+      render();
+      return Promise.resolve();
+    }
+    var batch = FB.db.batch();
+    State.invites.filter(function(x){ return x.sid === sid; }).forEach(function(x){ batch["delete"](FB.db.collection("invites").doc(x.code)); });
+    State.editors.filter(function(e){ return e.sid === sid; }).forEach(function(e){ batch["delete"](FB.db.collection("editors").doc(e.uid)); });
+    return batch.commit();
+  }
+  function setEventsOpen(open){
+    if(!State.cloud){ State.perm = {eventsOpen: open}; lsSet("a26.perm", State.perm); render(); return Promise.resolve(); }
+    return FB.db.collection("config").doc("perm").set({eventsOpen: open, updatedAt: Date.now()});
+  }
+  function devicesOf(sid){
+    if(!State.cloud) return (State.editor && State.editor.sid === sid) ? 1 : 0;
+    return State.editors.filter(function(e){ return e.sid === sid; }).length;
+  }
+
+  // 1인 1역 화면 아래 ‘편집 권한’ (선생님만)
+  function renderPerm(){
+    var box = $("perm-box");
+    clear(box);
+    if(!State.teacher) return;
+    var sec = el("section");
+    sec.style.marginTop = "24px";
+    var h = el("div", "sec-head");
+    h.appendChild(el("h2", null, "편집 권한"));
+    var gb = el("button", "link-btn", "＋ 권한 주기");
+    gb.type = "button";
+    gb.addEventListener("click", function(){ openGrant(""); });
+    h.appendChild(gb);
+    sec.appendChild(h);
+
+    if(State.permErr){
+      var pe = el("p", "form-err", State.permErr);
+      pe.style.whiteSpace = "pre-wrap";
+      pe.style.margin = "0 0 10px";
+      sec.appendChild(pe);
+    }
+
+    sec.appendChild(el("div", "perm-label", "학급 일정 올리기·고치기"));
+    var open = State.perm.eventsOpen !== false;
+    var seg = el("div", "seg");
+    seg.style.marginBottom = "6px";
+    [[true, "모든 학생"], [false, "권한 받은 학생만"]].forEach(function(p){
+      var b = el("button", null, p[1]);
+      b.type = "button";
+      b.setAttribute("aria-pressed", open === p[0] ? "true" : "false");
+      b.addEventListener("click", function(){
+        if(open === p[0]) return;
+        State.permErr = "";
+        setEventsOpen(p[0]).then(function(){
+          toast(p[0] ? "모든 학생이 일정을 올릴 수 있어요" : "이제 권한 받은 학생만 일정을 올릴 수 있어요");
+        })["catch"](function(e){ State.permErr = permErrText(e); render(); });
+      });
+      seg.appendChild(b);
+    });
+    sec.appendChild(seg);
+    sec.appendChild(el("p", "hint", open
+      ? "지금은 누구나 일정을 올리고 고칠 수 있고, 지우기는 선생님과 ‘일정 관리’ 권한을 받은 학생만 됩니다."
+      : "지금은 선생님과 ‘일정 관리’ 권한을 받은 학생만 일정을 올리고 고치고 지울 수 있습니다. 다른 학생은 보기만 합니다."));
+
+    var list = State.invites.slice().sort(function(a, b){ return a.sid < b.sid ? -1 : 1; });
+    var lh = el("div", "perm-label", "권한 받은 학생");
+    lh.style.marginTop = "16px";
+    sec.appendChild(lh);
+    if(!list.length){
+      sec.appendChild(emptyBox("아직 권한을 준 학생이 없어요", "‘권한 주기’로 학생을 고르면 그 학생에게 알려 줄 코드가 만들어집니다"));
+    }
+    list.forEach(function(inv){
+      var card = el("div", "grant");
+      card.appendChild(el("div", "grant-who", seatLabel(inv.sid)));
+      var sc = el("div", "grant-scopes");
+      inv.scopes.forEach(function(id){ sc.appendChild(el("span", null, SCOPE_MAP[id] ? SCOPE_MAP[id].label : id)); });
+      card.appendChild(sc);
+      var meta = el("div", "grant-meta");
+      meta.appendChild(document.createTextNode("코드 "));
+      meta.appendChild(el("b", null, inv.code));
+      var n = devicesOf(inv.sid);
+      meta.appendChild(document.createTextNode(" · " + (n ? "기기 " + n + "대 연결" : "아직 코드를 안 넣었어요")));
+      card.appendChild(meta);
+      var tools = el("div", "tools");
+      tools.appendChild(toolBtn("권한 바꾸기", function(){ openGrant(inv.sid); }));
+      tools.appendChild(toolBtn("회수", function(){
+        if(!window.confirm(seatLabel(inv.sid) + " 학생의 편집 권한을 회수할까요?\n코드를 넣은 기기에서도 바로 권한이 사라집니다.")) return;
+        State.permErr = "";
+        revokeGrant(inv.sid).then(function(){ toast("회수했습니다"); })["catch"](function(e){ State.permErr = permErrText(e); render(); });
+      }, true));
+      card.appendChild(tools);
+      sec.appendChild(card);
+    });
+    sec.appendChild(el("p", "hint", "학생은 자기 휴대폰에서 ‘로그인 → 편집 권한 코드 넣기’에 코드를 넣으면 됩니다. " +
+      "코드는 그 학생에게만 알려 주세요. 처음 한 번은 Firebase 콘솔에서 Authentication → 로그인 방법 → ‘익명’을 사용 설정해야 합니다."));
+    box.appendChild(sec);
+  }
+
+  // 권한 주기 시트
+  var grantSid = "", grantScopes = [];
+  function openGrant(sid){
+    var inv = sid ? State.invites.filter(function(x){ return x.sid === sid; })[0] : null;
+    grantSid = sid || "";
+    grantScopes = inv ? inv.scopes.slice() : ["events"];
+    $("gr-title").textContent = inv ? "권한 바꾸기" : "편집 권한 주기";
+    $("gr-save").textContent = inv ? "저장" : "코드 만들기";
+    $("gr-pick").hidden = false;
+    $("gr-done").hidden = true;
+    $("gr-err").hidden = true;
+    drawGrant();
+    openSheet("sheet-grant");
+  }
+  function drawGrant(){
+    var g = $("gr-students");
+    clear(g);
+    SIDS.forEach(function(s){
+      var has = State.invites.some(function(x){ return x.sid === s; });
+      var b = el("button", "pk" + (has ? " taken" : ""));
+      b.type = "button";
+      if(s === grantSid) b.setAttribute("aria-pressed", "true");
+      b.appendChild(el("b", null, noLabel(s)));
+      if(State.roster[s]) b.appendChild(el("span", "pk-nm", State.roster[s]));
+      b.appendChild(el("small", null, has ? "권한 있음" : " "));
+      b.addEventListener("click", function(){
+        grantSid = s;
+        var inv = State.invites.filter(function(x){ return x.sid === s; })[0];
+        if(inv) grantScopes = inv.scopes.slice();
+        $("gr-save").textContent = inv ? "저장" : "코드 만들기";
+        drawGrant();
+      });
+      g.appendChild(b);
+    });
+    var box = $("gr-scopes");
+    clear(box);
+    SCOPES.forEach(function(p){
+      var l = el("label", "check-row");
+      var c = document.createElement("input");
+      c.type = "checkbox";
+      c.checked = grantScopes.indexOf(p.id) >= 0;
+      c.addEventListener("change", function(){
+        grantScopes = grantScopes.filter(function(x){ return x !== p.id; });
+        if(c.checked) grantScopes.push(p.id);
+      });
+      l.appendChild(c);
+      l.appendChild(document.createTextNode(" " + p.label + " — " + p.desc));
+      box.appendChild(l);
+    });
+  }
+  $("gr-save").addEventListener("click", function(){
+    $("gr-err").hidden = true;
+    if(!grantSid){ showErr("gr-err", "학생을 골라 주세요."); return; }
+    // 순서를 고정해 둡니다(서버가 코드와 권한이 같은지 비교합니다).
+    var scopes = SCOPES.map(function(s){ return s.id; }).filter(function(id){ return grantScopes.indexOf(id) >= 0; });
+    if(!scopes.length){ showErr("gr-err", "권한을 하나 이상 골라 주세요. 모두 없애려면 목록에서 ‘회수’를 누르세요."); return; }
+    var btn = $("gr-save");
+    btn.disabled = true;
+    var sid = grantSid;
+    saveGrant(sid, scopes).then(function(code){
+      $("gr-pick").hidden = true;
+      $("gr-done").hidden = false;
+      $("gr-title").textContent = seatLabel(sid) + " 권한 코드";
+      $("gr-code").textContent = code;
+      $("gr-done-lead").textContent = seatLabel(sid) + " 학생에게 이 코드를 알려 주세요. 학생이 자기 휴대폰에서 ‘로그인 → 편집 권한 코드 넣기’에 넣으면 " +
+        scopes.map(function(id){ return "‘" + SCOPE_MAP[id].label + "’"; }).join(", ") + " 권한이 생깁니다. 이미 코드를 넣은 기기는 바뀐 권한이 바로 적용됩니다.";
+    })["catch"](function(e){ showErr("gr-err", permErrText(e)); })["then"](function(){ btn.disabled = false; });
   });
 
   /* ================= 모의고사 =================
@@ -5420,6 +5910,7 @@ var FIREBASE_CONFIG = {
     $("roles-hint").textContent = T
       ? "빈 자리를 누르면 학생을 직접 고르거나 랜덤으로 뽑을 수 있고, 들어가 있는 학생을 누르면 바꾸거나 뺄 수 있습니다. 뽑기는 아직 역할이 없는 학생 중에서만 고릅니다. 학생 화면에는 번호만 보이고 이름은 보이지 않습니다."
       : "역할은 선생님이 정합니다. 바꾸고 싶으면 선생님께 말씀드려 주세요.";
+    renderPerm();
   }
 
   // 빈 자리를 역할 없는 학생 중에서 랜덤으로 채웁니다. roleId 가 있으면 그 역할만.
@@ -5588,13 +6079,39 @@ var FIREBASE_CONFIG = {
 
   /* ---------------- 기타 ---------------- */
   Array.prototype.forEach.call($("plan-seg").children, function(b){
-    b.addEventListener("click", function(){ planMode = b.getAttribute("data-mode"); renderPlan(); renderFab(); });
+    b.addEventListener("click", function(){
+      var next = b.getAttribute("data-mode");
+      // 월간에서 다른 달을 보다가 주간으로 가면, 보던 달의 주를 보여 줍니다.
+      if(next === "week" && planMode === "cal"){
+        var sd = parseISO(calSelected);
+        if(sd.getFullYear() !== calCursor.getFullYear() || sd.getMonth() !== calCursor.getMonth()){
+          var t = today();
+          calSelected = (t.getFullYear() === calCursor.getFullYear() && t.getMonth() === calCursor.getMonth()) ? TODAY : iso(calCursor);
+        }
+      }
+      if(next === "cal"){
+        var s2 = parseISO(calSelected);
+        calCursor = new Date(s2.getFullYear(), s2.getMonth(), 1);
+      }
+      planMode = next;
+      lsSet("a26.planMode", planMode);
+      renderPlan(); renderFab();
+    });
   });
   Array.prototype.forEach.call($("notice-seg").children, function(b){
     b.addEventListener("click", function(){ noticeMode = b.getAttribute("data-mode"); renderNoticeView(); renderFab(); });
   });
-  $("cal-prev").addEventListener("click", function(){ calCursor.setMonth(calCursor.getMonth()-1); renderCal(); });
-  $("cal-next").addEventListener("click", function(){ calCursor.setMonth(calCursor.getMonth()+1); renderCal(); });
+  // 월간은 한 달씩, 주간은 한 주씩 넘깁니다.
+  function calStep(dir){
+    if(planMode === "week"){
+      calSelected = iso(addDays(parseISO(calSelected), 7 * dir));
+      var sd = parseISO(calSelected);
+      calCursor = new Date(sd.getFullYear(), sd.getMonth(), 1);
+    } else calCursor.setMonth(calCursor.getMonth() + dir);
+    renderCal();
+  }
+  $("cal-prev").addEventListener("click", function(){ calStep(-1); });
+  $("cal-next").addEventListener("click", function(){ calStep(1); });
   $("cal-today").addEventListener("click", function(){
     calCursor = new Date(today().getFullYear(), today().getMonth(), 1);
     calSelected = TODAY;
@@ -5627,6 +6144,7 @@ var FIREBASE_CONFIG = {
 
   if(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId){
     State.notices = []; State.events = []; State.bookings = []; State.resources = []; State.roster = {}; State.roles = null;
+    State.editor = null; State.invites = []; State.perm = {eventsOpen:true};
     State.teacher = false;
     applyWide(); render();
     initCloud()["catch"](function(e){

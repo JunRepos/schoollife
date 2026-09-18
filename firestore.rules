@@ -4,8 +4,11 @@ rules_version = '2';
 // TEACHER_EMAIL 자리에 선생님 계정 이메일을 넣어야 합니다.
 //
 // 요약
-//   전달사항 · 자료실 · 1인 1역    → 누구나 읽기, 선생님만 쓰기
-//   학급 일정                      → 누구나 읽기·쓰기, 지우기는 선생님만
+//   자료실 · 1인 1역               → 누구나 읽기, 선생님만 쓰기
+//   전달사항                       → 누구나 읽기, 선생님과 ‘전달사항 쓰기’ 권한 학생이 쓰기
+//   학급 일정                      → 누구나 읽기, 쓰기는 설정에 따라(모든 학생 / 권한 받은 학생만),
+//                                    지우기는 선생님과 ‘일정 관리’ 권한 학생
+//   편집 권한(invites · editors)   → 선생님이 코드를 만들고, 학생 기기가 코드를 넣어 권한을 받음
 //   면담 예약(자리 참/빔)          → 누구나 읽기, 누구나 신청, 중복은 서버가 거부
 //   신청자 이름 · 면담 내용        → 선생님만 읽기
 //   학생 명단 · 누가기록           → 선생님만 읽고 쓰기 (가장 민감한 자료)
@@ -18,21 +21,37 @@ service cloud.firestore {
           && request.auth.token.email in ['TEACHER_EMAIL'];
     }
 
+    // 선생님이 준 코드를 넣은 학생 기기(익명 로그인)가 그 권한을 가졌는지
+    function isEditor(scope) {
+      return request.auth != null
+          && exists(/databases/$(database)/documents/editors/$(request.auth.uid))
+          && scope in get(/databases/$(database)/documents/editors/$(request.auth.uid)).data.scopes;
+    }
+    // 선생님이 ‘권한 받은 학생만’으로 바꾸기 전까지는 누구나 일정을 올립니다.
+    function eventsOpen() {
+      return !exists(/databases/$(database)/documents/config/perm)
+          || get(/databases/$(database)/documents/config/perm).data.eventsOpen != false;
+    }
+
     // ── 학생도 보는 것 ────────────────────────────────────────────
+    // 전달사항: 선생님과 ‘전달사항 쓰기’ 권한 학생. 지우기는 선생님만.
     match /notices/{id} {
       allow read: if true;
-      allow write: if isTeacher();
+      allow create, update: if isTeacher() || isEditor('notices');
+      allow delete: if isTeacher();
     }
     match /resources/{id} {
       allow read: if true;
       allow write: if isTeacher();
     }
     // ── 학급 일정: 학생도 올리고 고칠 수 있습니다 ─────────────────
-    // 지우는 것은 선생님만. 시험 일정이 말없이 사라지는 일을 막기 위해서입니다.
+    // 선생님이 ‘권한 받은 학생만’으로 바꾸면 선생님과 ‘일정 관리’ 권한 학생만.
+    // 지우는 것은 선생님과 ‘일정 관리’ 권한 학생만. 시험 일정이 말없이 사라지는 일을 막기 위해서입니다.
     match /events/{id} {
       allow read: if true;
       allow create, update:
-        if request.resource.data.keys().hasAll(['type', 'title', 'date'])
+        if (isTeacher() || isEditor('events') || eventsOpen())
+        && request.resource.data.keys().hasAll(['type', 'title', 'date'])
         && request.resource.data.keys().hasOnly(['type','title','date','subject','memo','by','photos','createdAt','updatedAt'])
         && (!('photos' in request.resource.data) || request.resource.data.photos.size() <= 5)
         && request.resource.data.type in ['perf', 'exam', 'school', 'etc']
@@ -44,7 +63,32 @@ service cloud.firestore {
         && (!('memo' in request.resource.data) || request.resource.data.memo.size() <= 500)
         && (!('subject' in request.resource.data) || request.resource.data.subject.size() <= 30)
         && (!('by' in request.resource.data) || request.resource.data.by.size() <= 20);
-      allow delete: if isTeacher();
+      allow delete: if isTeacher() || isEditor('events');
+    }
+
+    // ── 편집 권한 ─────────────────────────────────────────────────
+    // config/perm: 일정 올리기 범위. 누구나 읽고 선생님만 바꿉니다.
+    match /config/{id} {
+      allow read: if true;
+      allow write: if isTeacher();
+    }
+    // invites/{코드}: 선생님이 만든 권한 코드. 코드를 아는 사람만 그 한 장을 읽을 수 있고, 목록은 선생님만.
+    match /invites/{code} {
+      allow get: if true;
+      allow list, write: if isTeacher();
+    }
+    // editors/{기기 uid}: 코드를 넣은 학생 기기. 코드와 권한이 선생님이 만든 것과 똑같아야 만들어집니다.
+    match /editors/{uid} {
+      allow read: if isTeacher() || (request.auth != null && request.auth.uid == uid);
+      allow create: if request.auth != null && request.auth.uid == uid
+                    && request.resource.data.keys().hasOnly(['code', 'sid', 'scopes', 'createdAt'])
+                    && request.resource.data.code is string
+                    && request.resource.data.code.size() == 6
+                    && exists(/databases/$(database)/documents/invites/$(request.resource.data.code))
+                    && get(/databases/$(database)/documents/invites/$(request.resource.data.code)).data.sid == request.resource.data.sid
+                    && get(/databases/$(database)/documents/invites/$(request.resource.data.code)).data.scopes == request.resource.data.scopes;
+      allow update: if isTeacher();
+      allow delete: if isTeacher() || (request.auth != null && request.auth.uid == uid);
     }
 
     // ── 1인 1역: 누구나 읽기, 선생님만 쓰기 ──────────────────────
