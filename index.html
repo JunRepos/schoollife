@@ -454,6 +454,31 @@
     padding:9px 11px; font-size:12px; color:var(--ink-2); line-height:1.55; margin-bottom:10px;
   }
 
+  /* 할 일 */
+  .todo-add{display:flex; gap:8px; margin-bottom:14px}
+  .todo-add input{flex:1; min-width:0; border:1px solid var(--rule); background:var(--surface); color:var(--ink); border-radius:11px; padding:12px 13px; font-size:16px; font-family:inherit}
+  .todo-add button{flex:0 0 auto; border:1px solid var(--ink); background:var(--ink); color:var(--paper); border-radius:11px; padding:0 17px; font-size:14.5px; font-weight:700; cursor:pointer; font-family:inherit}
+  .todos{display:flex; flex-direction:column; gap:8px}
+  .todo{display:flex; align-items:flex-start; gap:11px; background:var(--surface); border:1px solid var(--rule); border-radius:12px; padding:12px 13px}
+  .todo-check{flex:0 0 auto; width:24px; height:24px; margin-top:1px; border-radius:50%; border:2px solid var(--rule); background:transparent; cursor:pointer; display:grid; place-items:center; padding:0}
+  .todo-check svg{width:14px; height:14px; stroke:var(--paper); fill:none; stroke-width:2.6; stroke-linecap:round; stroke-linejoin:round; opacity:0}
+  .todo.done .todo-check{background:var(--ok); border-color:var(--ok)}
+  .todo.done .todo-check svg{opacity:1}
+  .todo-main{flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; text-align:left; background:transparent; border:0; padding:0; cursor:pointer; font-family:inherit; color:inherit}
+  .todo-title{font-size:15.5px; font-weight:600; line-height:1.45; word-break:break-word}
+  .todo.done .todo-title{text-decoration:line-through; color:var(--muted); font-weight:500}
+  .todo-note{font-size:13px; color:var(--ink-2); line-height:1.5; white-space:pre-wrap; word-break:break-word}
+  .todo-due{font-size:12.5px; font-weight:700; color:var(--t-task)}
+  .todo-due.today{color:var(--t-prep)}
+  .todo-due.over{color:var(--t-exam)}
+  .todo.done .todo-due{color:var(--muted); font-weight:600}
+  .todo-move{display:flex; flex-direction:column; gap:3px; flex:0 0 auto}
+  .todo-move button{border:1px solid var(--rule); background:var(--surface); color:var(--ink-2); border-radius:7px; width:30px; height:24px; font-size:11px; line-height:1; cursor:pointer; font-family:inherit}
+  .todo-move button:disabled{opacity:.35; cursor:default}
+  .todo-done-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin:20px 0 10px}
+  .todo-done-head button{border:0; background:transparent; padding:0; font-size:13px; font-weight:600; color:var(--muted); cursor:pointer; font-family:inherit}
+  .todo-done-head .del{color:var(--t-exam)}
+
   /* 모의고사 */
   .mock-info{display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 10px; margin-bottom:10px; font-size:13.5px}
   .mock-info b{font-weight:700}
@@ -690,6 +715,13 @@
           </div>
           <div id="home-notices"></div>
         </section>
+        <section id="home-todo-sec" hidden>
+          <div class="sec-head">
+            <h2>내 할 일</h2>
+            <button type="button" class="link-btn" data-go="todo">전체 보기</button>
+          </div>
+          <div id="home-todos"></div>
+        </section>
         <section>
           <div class="sec-head">
             <h2>오늘 시간표</h2>
@@ -814,6 +846,14 @@
         <div id="roles-left"></div>
         <p class="hint" id="roles-hint"></p>
         <div id="perm-box"></div>
+      </section>
+    </div>
+
+    <!-- 할 일 (선생님 전용) -->
+    <div id="view-todo" hidden>
+      <section style="border-top:0">
+        <div id="todo-demo"></div>
+        <div id="todo-body"></div>
       </section>
     </div>
 
@@ -1215,6 +1255,33 @@
   </form>
 </div>
 
+<!-- 할 일 -->
+<div class="sheet" id="sheet-todo" role="dialog" aria-modal="true" aria-labelledby="td-title">
+  <div class="grabber"></div>
+  <h2 id="td-title">할 일 추가</h2>
+  <form id="td-form">
+    <div class="field">
+      <label for="t-title">할 일</label>
+      <input type="text" id="t-title" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="t-note">메모 (없어도 됩니다)</label>
+      <textarea id="t-note" rows="3"></textarea>
+    </div>
+    <div class="field">
+      <label id="t-due-lb">기한</label>
+      <div class="picks" id="t-quick"></div>
+      <button type="button" class="datebtn" id="t-due" aria-labelledby="t-due-lb" aria-haspopup="dialog" aria-expanded="false" style="margin-top:8px"><span class="dv"></span><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12.5" rx="2"/><path d="M3 8.5h14M7 2.8v3.2M13 2.8v3.2"/></svg></button>
+    </div>
+    <p class="form-err" id="td-err" hidden></p>
+    <div class="sheet-actions">
+      <button type="button" class="btn danger" id="t-delete" hidden>삭제</button>
+      <button type="button" class="btn" data-close>취소</button>
+      <button type="submit" class="btn primary">저장</button>
+    </div>
+  </form>
+</div>
+
 <!-- 모의고사 불러오기 -->
 <div class="sheet" id="sheet-mock" role="dialog" aria-modal="true" aria-labelledby="mk-title">
   <div class="grabber"></div>
@@ -1551,7 +1618,7 @@ var FIREBASE_CONFIG = {
     roles:null, rolesErr:"",
     mocks:[], mockSel:"", mockStu:"",
     perm:{eventsOpen:true}, editor:null, invites:[], editors:[], permErr:"",
-    closures:{}
+    closures:{}, todos:[]
   };
 
   /* ---------------- 데모(로컬) ---------------- */
@@ -1572,6 +1639,7 @@ var FIREBASE_CONFIG = {
       State.editor = lsGet("a26.editor");
       State.invites = lsGet("a26.invites") || [];
       State.closures = lsGet("a26.closures") || {};
+      State.todos = lsGet("a26.todos") || [];
       State.teacher = !!lsGet("a26.teacherMode");
     },
     save:function(){
@@ -1583,6 +1651,7 @@ var FIREBASE_CONFIG = {
       lsSet("a26.roster", State.roster);
       lsSet("a26.grades", State.grades);
       lsSet("a26.unis", State.unis);
+      lsSet("a26.todos", State.todos);
     }
   };
 
@@ -1626,8 +1695,8 @@ var FIREBASE_CONFIG = {
             if(unsubRoster){ unsubRoster(); unsubRoster = null; }
             if(unsubEntries){ unsubEntries(); unsubEntries = null; }
             State.roster = {}; State.details = {}; State.entries = []; State.entriesFor = "";
-            State.grades = {}; State.unis = []; State.mocks = []; State.mockStu = "";
-            if(activeTab === "rec" || activeTab === "mock") switchTab("home");
+            State.grades = {}; State.unis = []; State.mocks = []; State.mockStu = ""; State.todos = [];
+            if(activeTab === "rec" || activeTab === "mock" || activeTab === "todo") switchTab("home");
           }
           applyWide();
           render();
@@ -1723,6 +1792,14 @@ var FIREBASE_CONFIG = {
                 topN: v.topN || 0, bestOf: !!v.bestOf, achRank: v.achRank || null,
                 past: Array.isArray(v.past) ? v.past : [], source: v.source || ""};
       }).sort(function(a,b){ return a.name < b.name ? -1 : 1; });
+      render();
+    }, quiet);
+    FB.db.collection("todos").onSnapshot(function(snap){
+      State.todos = snap.docs.map(function(d){
+        var v = d.data() || {};
+        return {id:d.id, title:v.title || "", note:v.note || "", due:v.due || "", done:!!v.done,
+                order:v.order || 0, doneAt:v.doneAt || 0, createdAt:v.createdAt || 0};
+      });
       render();
     }, quiet);
     FB.db.collection("invites").onSnapshot(function(snap){
@@ -2210,6 +2287,20 @@ var FIREBASE_CONFIG = {
       c.appendChild(el("div", "s", tp.label + " · " + (d.getMonth()+1) + "/" + d.getDate()));
       rail.appendChild(c);
     });
+
+    // 선생님: 오늘·지난 기한 할 일 몇 개
+    var tsec = $("home-todo-sec"), tbox = $("home-todos");
+    clear(tbox);
+    var left = State.teacher ? todoList(false) : [];
+    tsec.hidden = !left.length;
+    if(left.length){
+      var soon = left.filter(function(t){ return t.due && diffDays(t.due, TODAY) <= 0; });
+      var pick = soon.concat(left.filter(function(t){ return soon.indexOf(t) < 0; })).slice(0, 3);
+      var tw = el("div", "todos");
+      pick.forEach(function(t){ tw.appendChild(todoRow(t, {plain: true})); });
+      tbox.appendChild(tw);
+      if(left.length > pick.length) tbox.appendChild(el("p", "hint", "그 밖에 " + (left.length - pick.length) + "개 더 있어요"));
+    }
 
     var mb = $("home-meet");
     clear(mb);
@@ -3351,6 +3442,8 @@ var FIREBASE_CONFIG = {
   var TABS = [
     {id:"home", label:"오늘", title:"2-6 알리미", eyebrow:"오늘", view:"view-home",
      icon:'<path d="M3.6 9.6 11 4l7.4 5.6V17a1.4 1.4 0 0 1-1.4 1.4H5A1.4 1.4 0 0 1 3.6 17z"/><path d="M8.6 18.4v-5.6h4.8v5.6"/>'},
+    {id:"todo", label:"할 일", title:"내 할 일", eyebrow:"할 일", view:"view-todo", teacher:true,
+     icon:'<circle cx="11" cy="11" r="7.4"/><path d="M7.8 11.2l2.2 2.2 4.2-4.6"/>'},
     {id:"notice", label:"전달사항", title:"전달사항", eyebrow:"전달사항", view:"view-notice",
      icon:'<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h11A1.5 1.5 0 0 1 18 5.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 16.5z"/><path d="M7.5 8.5h7M7.5 12h7M7.5 15h4"/>'},
     {id:"tt", label:"시간표", title:"시간표", eyebrow:"시간표", view:"view-tt",
@@ -3415,6 +3508,8 @@ var FIREBASE_CONFIG = {
     } else if(State.teacher){
       if(activeTab === "notice" && noticeMode === "res"){
         label = "자료 올리기"; action = function(){ openRes(null); };
+      } else if(activeTab === "todo"){
+        label = "할 일 추가"; action = function(){ openTodo(null); };
       } else if(activeTab === "mock"){
         label = "모의고사 불러오기"; action = function(){ openMockImport(); };
       } else if(activeTab === "roles"){
@@ -4248,7 +4343,7 @@ var FIREBASE_CONFIG = {
   function closeSheets(){
     closeDatePop();
     $("scrim").classList.remove("open");
-    ["sheet-login","sheet-notice","sheet-res","sheet-event","sheet-book","sheet-move","sheet-entry","sheet-roster","sheet-import","sheet-uni","sheet-pick","sheet-role","sheet-mock","sheet-grant"]
+    ["sheet-login","sheet-notice","sheet-res","sheet-event","sheet-book","sheet-move","sheet-entry","sheet-roster","sheet-import","sheet-uni","sheet-pick","sheet-role","sheet-mock","sheet-grant","sheet-todo"]
       .forEach(function(id){ $(id).classList.remove("open"); });
   }
   $("scrim").addEventListener("click", closeSheets);
@@ -5381,6 +5476,235 @@ var FIREBASE_CONFIG = {
       toast(rows.length + "명 등록했습니다");
       render();
     })["catch"](function(err){ showErr("ro-err", saveErrText(err)); });
+  });
+
+  /* ================= 할 일 (선생님 전용) =================
+     선생님 계정으로만 보이는 개인 메모장입니다. 학생에게는 보이지 않습니다. */
+  var todoSort = lsGet("a26.todoSort") === "due" ? "due" : "mine";
+  var todoShowDone = false, todoFocus = false;
+
+  function todoList(done){
+    var list = State.todos.filter(function(t){ return !!t.done === done; });
+    if(done) return list.sort(function(a, b){ return (b.doneAt || 0) - (a.doneAt || 0); });
+    if(todoSort === "due"){
+      return list.sort(function(a, b){
+        if(!a.due !== !b.due) return a.due ? -1 : 1;      // 기한 있는 것 먼저
+        if(a.due !== b.due) return a.due < b.due ? -1 : 1;
+        return (a.order || 0) - (b.order || 0);
+      });
+    }
+    return list.sort(function(a, b){ return (a.order || 0) - (b.order || 0); });
+  }
+  function todoData(t, over){
+    var d = {title:t.title || "", note:t.note || "", due:t.due || "", done:!!t.done,
+             order:t.order || 0, doneAt:t.doneAt || 0, createdAt:t.createdAt || Date.now()};
+    Object.keys(over || {}).forEach(function(k){ d[k] = over[k]; });
+    return d;
+  }
+  function saveTodo(t, over){ return put("todos", t.id, todoData(t, over), "todos"); }
+  function addTodo(title){
+    var min = 0;
+    State.todos.forEach(function(t){ if((t.order || 0) < min) min = t.order || 0; });
+    return put("todos", uid(), todoData({title: title, order: min - 1, createdAt: Date.now()}), "todos");
+  }
+  function dueLabel(ds){
+    if(!ds) return "";
+    var n = diffDays(ds, TODAY);
+    if(n === 0) return "오늘";
+    if(n === 1) return "내일";
+    if(n === -1) return "어제";
+    return mdText(ds) + (n < 0 ? " 지남" : "");
+  }
+  function dueClass(ds){
+    if(!ds) return "";
+    var n = diffDays(ds, TODAY);
+    return n < 0 ? " over" : (n === 0 ? " today" : "");
+  }
+  // 한 줄. opts.plain 이면 첫 화면용(순서 바꾸기 버튼 없음)
+  function todoRow(t, opts){
+    opts = opts || {};
+    var row = el("div", "todo" + (t.done ? " done" : ""));
+    var ck = el("button", "todo-check");
+    ck.type = "button";
+    ck.setAttribute("aria-label", t.title + (t.done ? " 다시 할 일로" : " 완료"));
+    ck.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 10.5l4 4 7-8"/></svg>';
+    ck.addEventListener("click", function(){
+      saveTodo(t, {done: !t.done, doneAt: !t.done ? Date.now() : 0})
+        ["catch"](function(e){ toast(saveErrText(e).split("\n")[0]); });
+    });
+    row.appendChild(ck);
+
+    var main = el("button", "todo-main");
+    main.type = "button";
+    main.appendChild(el("div", "todo-title", t.title));
+    if(t.note) main.appendChild(el("div", "todo-note", t.note));
+    if(t.due) main.appendChild(el("div", "todo-due" + (t.done ? "" : dueClass(t.due)), dueLabel(t.due)));
+    main.addEventListener("click", function(){ openTodo(t); });
+    row.appendChild(main);
+
+    if(!opts.plain && !t.done && todoSort === "mine"){
+      var list = todoList(false), i = list.indexOf(t);
+      var mv = el("div", "todo-move");
+      var up = el("button", null, "↑"), dn = el("button", null, "↓");
+      up.type = dn.type = "button";
+      up.setAttribute("aria-label", "위로"); dn.setAttribute("aria-label", "아래로");
+      up.disabled = i <= 0;
+      dn.disabled = i < 0 || i >= list.length - 1;
+      up.addEventListener("click", function(){ swapTodo(list, i, i - 1); });
+      dn.addEventListener("click", function(){ swapTodo(list, i, i + 1); });
+      mv.appendChild(up); mv.appendChild(dn);
+      row.appendChild(mv);
+    }
+    return row;
+  }
+  function swapTodo(list, i, j){
+    if(i < 0 || j < 0 || i >= list.length || j >= list.length) return;
+    var a = list[i], b = list[j];
+    var ao = a.order || 0, bo = b.order || 0;
+    if(ao === bo) bo = ao + (j > i ? 1 : -1);
+    Promise.all([saveTodo(a, {order: bo}), saveTodo(b, {order: ao})])
+      ["catch"](function(e){ toast(saveErrText(e).split("\n")[0]); });
+  }
+
+  function renderTodo(){
+    fillDemo("todo-demo");
+    var box = $("todo-body");
+    clear(box);
+    if(!State.teacher){ box.appendChild(emptyBox("선생님만 볼 수 있어요", "")); return; }
+
+    // 빠른 추가 — 적고 엔터
+    var add = el("div", "todo-add");
+    var inp = document.createElement("input");
+    inp.type = "text";
+    inp.id = "todo-quick";
+    inp.placeholder = "할 일 적기";
+    inp.autocomplete = "off";
+    inp.setAttribute("aria-label", "할 일 적기");
+    var ab = el("button", null, "추가");
+    ab.type = "button";
+    function quickAdd(){
+      var v = inp.value.trim();
+      if(!v) return;
+      inp.value = "";
+      todoFocus = true;
+      addTodo(v)["catch"](function(e){ toast(saveErrText(e).split("\n")[0]); });
+    }
+    inp.addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); quickAdd(); } });
+    ab.addEventListener("click", quickAdd);
+    add.appendChild(inp);
+    add.appendChild(ab);
+    box.appendChild(add);
+
+    var left = todoList(false), done = todoList(true);
+
+    if(left.length > 1){
+      var seg = el("div", "seg");
+      [["mine", "내 순서"], ["due", "날짜순"]].forEach(function(p){
+        var b = el("button", null, p[1]);
+        b.type = "button";
+        b.setAttribute("aria-pressed", todoSort === p[0] ? "true" : "false");
+        b.addEventListener("click", function(){ todoSort = p[0]; lsSet("a26.todoSort", todoSort); render(); });
+        seg.appendChild(b);
+      });
+      box.appendChild(seg);
+    }
+
+    if(!left.length){
+      box.appendChild(emptyBox(done.length ? "할 일을 다 했어요" : "할 일이 없어요",
+        done.length ? "아래 완료 목록에서 지난 일을 볼 수 있어요" : "위 칸에 적고 엔터를 누르면 바로 들어갑니다"));
+    } else {
+      var wrap = el("div", "todos");
+      left.forEach(function(t){ wrap.appendChild(todoRow(t)); });
+      box.appendChild(wrap);
+    }
+
+    if(done.length){
+      var dh = el("div", "todo-done-head");
+      var tb = el("button", null, (todoShowDone ? "▾ " : "▸ ") + "완료 " + done.length + "개");
+      tb.type = "button";
+      tb.addEventListener("click", function(){ todoShowDone = !todoShowDone; render(); });
+      dh.appendChild(tb);
+      var cb = el("button", "del", "완료한 항목 지우기");
+      cb.type = "button";
+      cb.addEventListener("click", function(){
+        if(!window.confirm("완료한 할 일 " + done.length + "개를 지울까요?\n되돌릴 수 없습니다.")) return;
+        Promise.all(done.map(function(t){ return drop("todos", t.id, "todos"); }))
+          .then(function(){ toast("지웠습니다"); })
+          ["catch"](function(e){ toast(saveErrText(e).split("\n")[0]); });
+      });
+      dh.appendChild(cb);
+      box.appendChild(dh);
+      if(todoShowDone){
+        var dw = el("div", "todos");
+        done.forEach(function(t){ dw.appendChild(todoRow(t)); });
+        box.appendChild(dw);
+      }
+    }
+
+    if(todoFocus){
+      todoFocus = false;
+      setTimeout(function(){ var q = $("todo-quick"); if(q) q.focus(); }, 0);
+    }
+  }
+
+  /* 할 일 시트 */
+  var editingTodo = null, todoDue = "";
+  function setTodoDue(ds){
+    todoDue = ds || "";
+    var btn = $("t-due");
+    btn.dataset.value = todoDue || TODAY;
+    btn.querySelector(".dv").textContent = todoDue ? (dateLabel(todoDue) + " · " + dueLabel(todoDue)) : "기한 없음";
+    drawTodoQuick();
+  }
+  function drawTodoQuick(){
+    var box = $("t-quick");
+    clear(box);
+    var mon = addDays(today(), (8 - today().getDay()) % 7 || 7);   // 다음 주 월요일
+    [["오늘", TODAY], ["내일", iso(addDays(today(), 1))], ["다음 주", iso(mon)], ["없음", ""]].forEach(function(p){
+      var b = el("button", "pick", p[0]);
+      b.type = "button";
+      b.style.setProperty("--tc", "var(--t-task)");
+      b.setAttribute("aria-pressed", todoDue === p[1] ? "true" : "false");
+      b.addEventListener("click", function(){ setTodoDue(p[1]); });
+      box.appendChild(b);
+    });
+  }
+  function openTodo(t){
+    editingTodo = t;
+    $("td-title").textContent = t ? "할 일 고치기" : "할 일 추가";
+    $("t-title").value = t ? t.title : "";
+    $("t-note").value = t ? (t.note || "") : "";
+    setTodoDue(t ? (t.due || "") : "");
+    $("t-delete").hidden = !t;
+    $("td-err").hidden = true;
+    openSheet("sheet-todo");
+    if(!t) setTimeout(function(){ $("t-title").focus(); }, 280);
+  }
+  $("t-due").addEventListener("click", function(){
+    openDatePop("t-due", {onPick: function(ds){ setTodoDue(ds); }});
+  });
+  $("td-form").addEventListener("submit", function(e){
+    e.preventDefault();
+    $("td-err").hidden = true;
+    var title = $("t-title").value.trim();
+    if(!title){ showErr("td-err", "할 일을 적어 주세요."); $("t-title").focus(); return; }
+    var was = editingTodo;
+    var body = {title: title, note: $("t-note").value.trim(), due: todoDue,
+                done: was ? !!was.done : false, doneAt: was ? (was.doneAt || 0) : 0,
+                order: was ? (was.order || 0) : 0, createdAt: was ? (was.createdAt || Date.now()) : Date.now()};
+    if(!was){
+      var min = 0;
+      State.todos.forEach(function(t){ if((t.order || 0) < min) min = t.order || 0; });
+      body.order = min - 1;
+    }
+    put("todos", was ? was.id : uid(), body, "todos").then(function(){
+      closeSheets();
+      toast(was ? "고쳤습니다" : "추가했습니다");
+    })["catch"](function(err){ showErr("td-err", saveErrText(err)); });
+  });
+  $("t-delete").addEventListener("click", function(){
+    if(!editingTodo || !window.confirm("이 할 일을 지울까요?")) return;
+    drop("todos", editingTodo.id, "todos").then(function(){ closeSheets(); toast("지웠습니다"); });
   });
 
   /* ================= 편집 권한 =================
@@ -6631,6 +6955,7 @@ var FIREBASE_CONFIG = {
     else if(activeTab === "meet") renderMeet();
     else if(activeTab === "roles") renderRoles();
     else if(activeTab === "mock") renderMock();
+    else if(activeTab === "todo") renderTodo();
     else if(activeTab === "rec") renderRec();
   }
 

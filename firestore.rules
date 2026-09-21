@@ -155,6 +155,11 @@ service cloud.firestore {
       allow read, write: if isTeacher();
     }
 
+    // ── 선생님 할 일 메모: 선생님만 ───────────────────────────────
+    match /todos/{id} {
+      allow read, write: if isTeacher();
+    }
+
     // ── 대학별 환산표: 선생님만 ───────────────────────────────────
     match /unis/{id} {
       allow read, write: if isTeacher();
