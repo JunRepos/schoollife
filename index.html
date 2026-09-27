@@ -454,6 +454,27 @@
     padding:9px 11px; font-size:12px; color:var(--ink-2); line-height:1.55; margin-bottom:10px;
   }
 
+  /* 생활기록부 초안 */
+  .sb-card{background:var(--surface); border:1px solid var(--rule); border-radius:13px; padding:14px 15px; margin-bottom:12px}
+  .sb-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px}
+  .sb-name{font-size:15.5px; font-weight:700}
+  .sb-count{font-size:12.5px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap}
+  .sb-count.over{color:var(--t-exam); font-weight:700}
+  .sb-label{font-size:11.5px; font-weight:600; color:var(--muted); margin:11px 0 6px; line-height:1.5}
+  .sb-items{display:flex; flex-direction:column; gap:6px}
+  .sb-item{display:flex; align-items:flex-start; gap:8px; background:var(--surface-2); border-radius:9px; padding:8px 10px; font-size:13.5px; line-height:1.5; color:var(--ink-2)}
+  .sb-item span{flex:1; min-width:0; word-break:break-word; color:var(--ink)}
+  .sb-item button{border:0; background:transparent; color:var(--muted); font-size:13px; cursor:pointer; padding:0 2px; font-family:inherit}
+  .sb-add{display:flex; gap:7px; margin-top:7px}
+  .sb-add input{flex:1; min-width:0; border:1px solid var(--rule); background:var(--paper); color:var(--ink); border-radius:9px; padding:9px 11px; font-size:15px; font-family:inherit}
+  .sb-add button{flex:0 0 auto; border:1px solid var(--rule); background:var(--surface); color:var(--ink); border-radius:9px; padding:0 14px; font-size:13.5px; font-weight:600; cursor:pointer; font-family:inherit}
+  .sb-sugg{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px}
+  .sb-sugg button{border:1px dashed var(--rule); background:transparent; color:var(--ink-2); border-radius:999px; padding:5px 11px; font-size:12px; cursor:pointer; font-family:inherit}
+  .sb-draft{width:100%; border:1px solid var(--rule); background:var(--paper); color:var(--ink); border-radius:10px; padding:11px 12px; font-size:15px; line-height:1.65; font-family:inherit; resize:vertical; min-height:130px}
+  .sb-tools{display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap}
+  .sb-tools button{border:1px solid var(--rule); background:var(--surface); color:var(--ink); border-radius:9px; padding:7px 13px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit}
+  .sb-status{font-size:12px; color:var(--muted); margin-left:auto}
+
   /* 할 일 */
   .todo-add{display:flex; gap:8px; margin-bottom:14px}
   .todo-add input{flex:1; min-width:0; border:1px solid var(--rule); background:var(--surface); color:var(--ink); border-radius:11px; padding:12px 13px; font-size:16px; font-family:inherit}
@@ -1614,7 +1635,7 @@ var FIREBASE_CONFIG = {
     cloud:false, teacher:false, user:null, sid:lsGet("a26.sid") || "",
     notices:[], events:[], bookings:[], details:{}, resources:[],
     roster:{}, entries:[], entriesFor:"", recSel:"",
-    grades:{}, unis:[], recMode:"rec", scoreMode:"area", ipOpen:{},
+    grades:{}, unis:[], sb:{}, recMode:"rec", scoreMode:"area", ipOpen:{},
     roles:null, rolesErr:"",
     mocks:[], mockSel:"", mockStu:"",
     perm:{eventsOpen:true}, editor:null, invites:[], editors:[], permErr:"",
@@ -1640,6 +1661,7 @@ var FIREBASE_CONFIG = {
       State.invites = lsGet("a26.invites") || [];
       State.closures = lsGet("a26.closures") || {};
       State.todos = lsGet("a26.todos") || [];
+      State.sb = lsGet("a26.sb") || {};
       State.teacher = !!lsGet("a26.teacherMode");
     },
     save:function(){
@@ -1695,7 +1717,7 @@ var FIREBASE_CONFIG = {
             if(unsubRoster){ unsubRoster(); unsubRoster = null; }
             if(unsubEntries){ unsubEntries(); unsubEntries = null; }
             State.roster = {}; State.details = {}; State.entries = []; State.entriesFor = "";
-            State.grades = {}; State.unis = []; State.mocks = []; State.mockStu = ""; State.todos = [];
+            State.grades = {}; State.unis = []; State.mocks = []; State.mockStu = ""; State.todos = []; State.sb = {};
             if(activeTab === "rec" || activeTab === "mock" || activeTab === "todo") switchTab("home");
           }
           applyWide();
@@ -1793,6 +1815,13 @@ var FIREBASE_CONFIG = {
                 past: Array.isArray(v.past) ? v.past : [], source: v.source || ""};
       }).sort(function(a,b){ return a.name < b.name ? -1 : 1; });
       render();
+    }, quiet);
+    // 생기부 초안 (records/{학번} 문서). 적는 중에는 화면을 다시 그리지 않습니다.
+    FB.db.collection("records").onSnapshot(function(snap){
+      var m = {};
+      snap.docs.forEach(function(d){ var v = d.data() || {}; if(v.sb) m[d.id] = v.sb; });
+      State.sb = m;
+      if(!sbTyping) render();
     }, quiet);
     FB.db.collection("todos").onSnapshot(function(snap){
       State.todos = snap.docs.map(function(d){
@@ -2837,6 +2866,7 @@ var FIREBASE_CONFIG = {
       b.appendChild(el("div", "rname", names[sid] || sid));
       var gr = wAvgRank(gradeRows(sid));
       if(gr != null) b.appendChild(el("div", "rcount", gr.toFixed(2)));
+      if(sbWritten(sid)) b.appendChild(el("div", "rcount", "생기부 " + sbWritten(sid) + "/3"));
       var cnt = entryCount(sid);
       if(cnt !== null) b.appendChild(el("div", "rcount" + (cnt ? "" : " zero"), cnt + "건"));
       b.addEventListener("click", function(){
@@ -2876,7 +2906,7 @@ var FIREBASE_CONFIG = {
     detail.appendChild(dhead);
 
     var seg = el("div", "seg");
-    [["rec","누가기록"],["score","성적"],["uni","대학 환산"]].forEach(function(p){
+    [["rec","누가기록"],["sb","생기부"],["score","성적"],["uni","대학 환산"]].forEach(function(p){
       var b = el("button", null, p[1]);
       b.type = "button";
       b.setAttribute("aria-pressed", State.recMode === p[0] ? "true" : "false");
@@ -2885,6 +2915,7 @@ var FIREBASE_CONFIG = {
     });
     detail.appendChild(seg);
 
+    if(State.recMode === "sb"){ renderSb(detail, State.recSel); return; }
     if(State.recMode === "score"){ renderScore(detail, State.recSel); return; }
     if(State.recMode === "uni"){ renderUni(detail, State.recSel); return; }
 
@@ -2918,6 +2949,217 @@ var FIREBASE_CONFIG = {
       wrap.appendChild(card);
     });
     detail.appendChild(wrap);
+  }
+
+  /* ================= 생활기록부 초안 (선생님 전용) =================
+     자율·자치활동 · 진로활동 · 행동특성 및 종합의견 세 칸.
+     학생마다 ‘한 일’을 모아 두고, 실제로 적어 줄 문장을 씁니다.
+     저장 위치는 누가기록과 같은 records/{학번} 문서라 선생님만 봅니다. */
+  var SB_AREAS = [
+    {id:"auto",     label:"자율·자치활동",        limit:500, hint:"학급 활동, 1인 1역, 학급회·행사에서 맡은 일과 그때 보인 모습"},
+    {id:"career",   label:"진로활동",             limit:700, hint:"진로 수업·검사·상담, 관심 분야를 찾아 간 과정과 변화"},
+    {id:"behavior", label:"행동특성 및 종합의견", limit:500, hint:"한 해 동안 관찰한 성격·태도·관계, 성장한 점을 총평으로"}
+  ];
+  var sbTyping = false, sbTimer = null;
+
+  function sbArea(sid, id){
+    var a = (State.sb[sid] || {})[id] || {};
+    return {items: Array.isArray(a.items) ? a.items : [], draft: a.draft || ""};
+  }
+  // 세 칸을 통째로 다시 써서 저장합니다(빠진 칸이 없게).
+  function sbSave(sid, id, patch){
+    var next = {};
+    SB_AREAS.forEach(function(a){
+      var v = sbArea(sid, a.id);
+      next[a.id] = {items: v.items.slice(), draft: v.draft};
+    });
+    Object.keys(patch).forEach(function(k){ next[id][k] = patch[k]; });
+    State.sb[sid] = next;
+    if(!State.cloud){ lsSet("a26.sb", State.sb); return Promise.resolve(); }
+    return FB.db.collection("records").doc(sid).set({sb: next}, {merge: true});
+  }
+  function sbWritten(sid){
+    var n = 0;
+    SB_AREAS.forEach(function(a){ if(sbArea(sid, a.id).draft.trim()) n++; });
+    return n;
+  }
+  // ‘한 일’ 추천 — 창체 계획표, 1인 1역, 누가기록에서 가져옵니다.
+  function sbSuggest(sid, id){
+    var out = [];
+    function push(label, value){ if(label) out.push({label: label, value: value || label}); }
+    if(id === "auto"){
+      var r = roleOf(roleList(), sid);
+      if(r) push(r.name + " (1인 1역)");
+      Object.keys(CC_PLAN).sort().forEach(function(k){
+        var p = CC_PLAN[k];
+        if(p.all){ push(p.all); return; }
+        Object.keys(p).forEach(function(n){
+          var v = p[n];
+          // 동아리 활동은 생기부에서 따로 적는 칸이라 여기서는 뺍니다.
+          if(v.charAt(0) === "@" || v === "수업 없음" || /진로|동아리/.test(v)) return;
+          push(v);
+        });
+      });
+    } else if(id === "career"){
+      push("진로 수업 (주 1회)");
+      push("진로 상담");
+      Object.keys(CC_PLAN).sort().forEach(function(k){
+        var p = CC_PLAN[k];
+        if(p.all) return;
+        Object.keys(p).forEach(function(n){
+          var v = p[n];
+          if(/진로|직업|대학|전공|학과/.test(v)) push(v);
+        });
+      });
+      var g = State.grades[sid];
+      if(g && g.rows && g.rows.length) push("교과 선택과 진로의 연결");
+    } else {
+      // 행동특성: 누가기록(행동특성·칭찬)에서 그대로 가져옵니다.
+      if(State.entriesFor === sid){
+        State.entries.filter(function(e){ return e.kind === "behavior" || e.kind === "merit"; })
+          .sort(function(a, b){ return a.date < b.date ? 1 : -1; })
+          .slice(0, 8)
+          .forEach(function(e){
+            var t = e.text.replace(/\s+/g, " ").trim();
+            push((t.length > 22 ? t.slice(0, 22) + "…" : t), t);
+          });
+      }
+      var rr = roleOf(roleList(), sid);
+      if(rr) push(rr.name + " (1인 1역)");
+    }
+    var seen = {}, list = [];
+    out.forEach(function(o){ if(o.value && !seen[o.value]){ seen[o.value] = 1; list.push(o); } });
+    return list.slice(0, 10);
+  }
+
+  function renderSb(box, sid){
+    box.appendChild(el("p", "hint", "생활기록부에 적을 내용을 미리 써 두는 칸입니다. 적는 대로 저장되고, 선생님만 볼 수 있습니다. " +
+      "글자 수는 공백을 포함해 셉니다(자율 500 · 진로 700 · 행발 500자 기준)."));
+
+    SB_AREAS.forEach(function(area){
+      var cur = sbArea(sid, area.id);
+      var card = el("div", "sb-card");
+
+      var head = el("div", "sb-head");
+      head.appendChild(el("div", "sb-name", area.label));
+      var count = el("div", "sb-count" + (cur.draft.length > area.limit ? " over" : ""),
+        cur.draft.length + " / " + area.limit + "자");
+      head.appendChild(count);
+      card.appendChild(head);
+      card.appendChild(el("div", "sb-label", area.hint));
+
+      // 한 일
+      card.appendChild(el("div", "sb-label", "한 일"));
+      var items = el("div", "sb-items");
+      if(!cur.items.length) items.appendChild(el("div", "sb-item", "아직 적어 둔 활동이 없어요"));
+      cur.items.forEach(function(t, i){
+        var row = el("div", "sb-item");
+        row.appendChild(el("span", null, t));
+        var x = el("button", null, "✕");
+        x.type = "button";
+        x.setAttribute("aria-label", "이 활동 빼기");
+        x.addEventListener("click", function(){
+          var next = cur.items.slice();
+          next.splice(i, 1);
+          sbSave(sid, area.id, {items: next}).then(render)["catch"](function(e){ toast(saveErrText(e).split("\n")[0]); });
+        });
+        row.appendChild(x);
+        items.appendChild(row);
+      });
+      card.appendChild(items);
+
+      var addRow = el("div", "sb-add");
+      var inp = document.createElement("input");
+      inp.type = "text";
+      inp.placeholder = "한 일 적기";
+      inp.setAttribute("aria-label", area.label + " 한 일 적기");
+      var addBtn = el("button", null, "추가");
+      addBtn.type = "button";
+      function addItem(v){
+        var t = (v || inp.value).trim();
+        if(!t) return;
+        if(cur.items.indexOf(t) >= 0){ toast("이미 있는 활동이에요"); return; }
+        inp.value = "";
+        sbSave(sid, area.id, {items: cur.items.concat([t])}).then(render)["catch"](function(e){ toast(saveErrText(e).split("\n")[0]); });
+      }
+      inp.addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); addItem(); } });
+      addBtn.addEventListener("click", function(){ addItem(); });
+      addRow.appendChild(inp);
+      addRow.appendChild(addBtn);
+      card.appendChild(addRow);
+
+      var sugg = sbSuggest(sid, area.id).filter(function(s){ return cur.items.indexOf(s.value) < 0; });
+      if(sugg.length){
+        var sw = el("div", "sb-sugg");
+        sugg.forEach(function(s){
+          var b = el("button", null, "＋ " + s.label);
+          b.type = "button";
+          b.addEventListener("click", function(){ addItem(s.value); });
+          sw.appendChild(b);
+        });
+        card.appendChild(sw);
+      }
+
+      // 적어 줄 내용
+      card.appendChild(el("div", "sb-label", "적어 줄 내용"));
+      var ta = document.createElement("textarea");
+      ta.className = "sb-draft";
+      ta.value = cur.draft;
+      ta.setAttribute("aria-label", area.label + " 적어 줄 내용");
+      var status = el("div", "sb-status", "");
+      ta.addEventListener("input", function(){
+        count.textContent = ta.value.length + " / " + area.limit + "자";
+        count.classList.toggle("over", ta.value.length > area.limit);
+        sbTyping = true;
+        status.textContent = "적는 중…";
+        clearTimeout(sbTimer);
+        sbTimer = setTimeout(function(){
+          status.textContent = "저장 중…";
+          sbSave(sid, area.id, {draft: ta.value}).then(function(){
+            status.textContent = "저장됨";
+          })["catch"](function(e){
+            status.textContent = saveErrText(e).split("\n")[0];
+          });
+        }, 900);
+      });
+      ta.addEventListener("blur", function(){
+        sbTyping = false;
+        if(ta.value === sbArea(sid, area.id).draft) return;
+        clearTimeout(sbTimer);
+        status.textContent = "저장 중…";
+        sbSave(sid, area.id, {draft: ta.value}).then(function(){ status.textContent = "저장됨"; })
+          ["catch"](function(e){ status.textContent = saveErrText(e).split("\n")[0]; });
+      });
+      card.appendChild(ta);
+
+      var tools = el("div", "sb-tools");
+      var pasteBtn = el("button", null, "한 일 붙여 넣기");
+      pasteBtn.type = "button";
+      pasteBtn.addEventListener("click", function(){
+        var list = sbArea(sid, area.id).items;
+        if(!list.length){ toast("먼저 한 일을 적어 주세요"); return; }
+        var add = list.join(", ");
+        ta.value = ta.value ? (ta.value.replace(/\s*$/, "") + " " + add) : add;
+        ta.dispatchEvent(new Event("input"));
+        ta.focus();
+      });
+      tools.appendChild(pasteBtn);
+      var copyBtn = el("button", null, "복사");
+      copyBtn.type = "button";
+      copyBtn.addEventListener("click", function(){
+        var text = ta.value;
+        if(!text.trim()){ toast("적은 내용이 없어요"); return; }
+        function ok(){ toast("복사했습니다. 나이스에 붙여 넣으세요"); }
+        if(navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(text).then(ok, function(){ ta.select(); document.execCommand("copy"); ok(); });
+        } else { ta.select(); document.execCommand("copy"); ok(); }
+      });
+      tools.appendChild(copyBtn);
+      tools.appendChild(status);
+      card.appendChild(tools);
+
+      box.appendChild(card);
+    });
   }
 
   /* ---------------- 성적 화면 ---------------- */
