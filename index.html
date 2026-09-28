@@ -180,20 +180,30 @@
   .ev-dday{flex:0 0 auto; font-family:var(--serif); font-size:13px; font-weight:600; color:var(--tc); font-variant-numeric:tabular-nums; padding-top:1px}
   .ev-dday.past{color:var(--muted)}
   /* D-day 판 — 정기 시험 · 수행 평가 · 학교 행사를 한 줄씩, 휴대폰에서도 한눈에 */
-  .ddboard{display:flex; flex-direction:column; gap:6px}
+  .ddboard{display:flex; flex-direction:column; gap:6px; align-items:stretch}
+  .ddgrp{background:var(--surface); border:1px solid var(--rule); border-left:3px solid var(--tc); border-radius:10px; overflow:hidden}
+  .ddgrp.none{border-left-color:var(--rule-2)}
   .ddrow{
     display:flex; align-items:center; gap:8px; width:100%; text-align:left; font-family:inherit; color:var(--ink);
-    background:var(--surface); border:1px solid var(--rule); border-left:3px solid var(--tc);
-    border-radius:10px; padding:9px 11px; cursor:pointer;
+    background:transparent; border:0; padding:9px 11px; cursor:pointer;
   }
   .ddrow .k{flex:0 0 52px; font-size:11.5px; font-weight:700; color:var(--tc); line-height:1.3}
   .ddrow .t{flex:1; min-width:0; font-size:13.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .ddrow .m{flex:0 0 auto; font-size:11.5px; color:var(--muted); font-variant-numeric:tabular-nums}
   .ddrow .more{flex:0 0 auto; font-size:10.5px; color:var(--muted); background:var(--surface-2); border-radius:4px; padding:1px 5px}
   .ddrow .d{flex:0 0 auto; min-width:42px; text-align:right; font-family:var(--serif); font-size:16px; font-weight:600; color:var(--tc); font-variant-numeric:tabular-nums; letter-spacing:-.02em}
-  .ddrow.none{cursor:default; border-left-color:var(--rule-2)}
+  .ddrow.none{cursor:default}
   .ddrow.none .k{color:var(--muted)}
   .ddrow.none .t{font-weight:500; color:var(--muted); font-size:12.5px}
+  /* 펼쳤을 때 같은 갈래의 나머지 일정 */
+  .ddsub{
+    display:flex; align-items:center; gap:8px; width:100%; text-align:left; font-family:inherit; color:var(--ink-2);
+    background:transparent; border:0; border-top:1px solid var(--rule-2); padding:7px 11px 7px 14px; cursor:pointer;
+  }
+  .ddsub .t{flex:1; min-width:0; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .ddsub .m{flex:0 0 auto; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums}
+  .ddsub .d{flex:0 0 auto; min-width:42px; text-align:right; font-family:var(--serif); font-size:13px; font-weight:600; color:var(--tc); font-variant-numeric:tabular-nums}
+  .ddnote{font-size:11px; color:var(--muted); padding:6px 11px 7px 14px; border-top:1px solid var(--rule-2)}
 
   /* 세그먼트 · 칩 */
   .seg{display:flex; gap:4px; background:var(--surface-2); border-radius:10px; padding:3px; margin-bottom:16px}
@@ -769,7 +779,7 @@
         <section>
           <div class="sec-head">
             <h2>D-day</h2>
-            <button type="button" class="link-btn" data-go="plan">전체 보기</button>
+            <button type="button" class="link-btn" id="dday-all" aria-expanded="false">모두 보기</button>
           </div>
           <div class="ddboard" id="home-dday"></div>
         </section>
@@ -2156,6 +2166,8 @@ var FIREBASE_CONFIG = {
     return card;
   }
   // D-day 판에서 나누는 갈래. ‘기타’는 있을 때만 줄이 생깁니다.
+  var DDAY_MAX = 6;   // 펼쳤을 때 한 갈래에서 보여 주는 최대 개수
+  var ddayAll = !!lsGet("a26.ddayAll");
   var DDAY_GROUPS = [
     {id:"exam",   label:"정기 시험"},
     {id:"perf",   label:"수행 평가"},
@@ -2166,24 +2178,51 @@ var FIREBASE_CONFIG = {
   function ddayRow(g, items){
     var row = el("button", "ddrow" + (items.length ? "" : " none"));
     row.type = "button";
-    row.style.setProperty("--tc", (TYPE_MAP[g.id] || TYPE_MAP.etc).color);
     row.appendChild(el("b", "k", g.label));
     if(!items.length){
       row.appendChild(el("span", "t", "예정 없음"));
       row.disabled = true;
       return row;
     }
-    var ev = items[0];
-    var n = diffDays(ev.date, TODAY);
-    if(n < 0 && ev.end && diffDays(ev.end, TODAY) >= 0) n = 0;   // 시험 기간 중에는 D-DAY
-    var d = parseISO(ev.date);
+    var ev = items[0], n = ddayLeft(ev), d = parseISO(ev.date);
     row.appendChild(el("span", "t", ev.title));
     row.appendChild(el("span", "m", (d.getMonth()+1) + "/" + d.getDate()));
-    if(items.length > 1) row.appendChild(el("span", "more", "+" + (items.length - 1)));
+    // 접어 놓았을 때만 나머지 개수를 세어 줍니다(펼치면 아래에 다 보이니까요).
+    if(!ddayAll && items.length > 1) row.appendChild(el("span", "more", "+" + (items.length - 1)));
     row.appendChild(el("span", "d", ddayText(n)));
     row.setAttribute("aria-label", g.label + " " + ev.title + " " + ddayText(n) + ", 일정에서 보기");
     row.addEventListener("click", function(){ goPlanDate(ev.date); });
     return row;
+  }
+  // 갈래 한 묶음. 펼친 상태면 나머지 일정까지 줄줄이 보여 줍니다.
+  function ddayGroup(g, items){
+    var box = el("div", "ddgrp" + (items.length ? "" : " none"));
+    box.style.setProperty("--tc", (TYPE_MAP[g.id] || TYPE_MAP.etc).color);
+    box.appendChild(ddayRow(g, items));
+    if(ddayAll && items.length > 1){
+      items.slice(1, DDAY_MAX).forEach(function(ev){ box.appendChild(ddaySub(ev)); });
+      if(items.length > DDAY_MAX){
+        box.appendChild(el("div", "ddnote", "그 밖에 " + (items.length - DDAY_MAX) + "개는 달력에서 볼 수 있어요"));
+      }
+    }
+    return box;
+  }
+  function ddaySub(ev){
+    var n = ddayLeft(ev), d = parseISO(ev.date);
+    var row = el("button", "ddsub");
+    row.type = "button";
+    row.appendChild(el("span", "t", ev.title));
+    row.appendChild(el("span", "m", (d.getMonth()+1) + "/" + d.getDate()));
+    row.appendChild(el("span", "d", ddayText(n)));
+    row.setAttribute("aria-label", ev.title + " " + ddayText(n) + ", 일정에서 보기");
+    row.addEventListener("click", function(){ goPlanDate(ev.date); });
+    return row;
+  }
+  // 남은 날. 시험처럼 여러 날짜에 걸친 일정은 기간 중에 D-DAY.
+  function ddayLeft(ev){
+    var n = diffDays(ev.date, TODAY);
+    if(n < 0 && ev.end && diffDays(ev.end, TODAY) >= 0) n = 0;
+    return n;
   }
   // 그 날짜가 보이게 일정 탭을 엽니다.
   function goPlanDate(ds){
@@ -2391,11 +2430,25 @@ var FIREBASE_CONFIG = {
     // D-day: 정기 시험 · 수행 평가 · 학교 행사를 한 줄씩 나눠서 한눈에 봅니다.
     var board = $("home-dday");
     clear(board);
+    var many = false;
     DDAY_GROUPS.forEach(function(g){
       var items = up.filter(function(e){ return (TYPE_MAP[e.type] ? e.type : "etc") === g.id; });
       if(!items.length && g.optional) return;
-      board.appendChild(ddayRow(g, items));
+      if(items.length > 1) many = true;
+      board.appendChild(ddayGroup(g, items));
     });
+    // 펼쳤을 때만 달력으로 가는 길을 따로 둡니다.
+    if(ddayAll && up.length){
+      var cal = el("button", "link-btn", "달력에서 보기");
+      cal.type = "button";
+      cal.style.alignSelf = "flex-start";
+      cal.addEventListener("click", function(){ switchTab("plan"); });
+      board.appendChild(cal);
+    }
+    var allBtn = $("dday-all");
+    allBtn.hidden = !many && !ddayAll;
+    allBtn.textContent = ddayAll ? "접기" : "모두 보기";
+    allBtn.setAttribute("aria-expanded", ddayAll ? "true" : "false");
 
     // 선생님: 오늘·지난 기한 할 일 몇 개
     var tsec = $("home-todo-sec"), tbox = $("home-todos");
@@ -4736,6 +4789,12 @@ var FIREBASE_CONFIG = {
   });
   Array.prototype.forEach.call(document.querySelectorAll("[data-go]"), function(b){
     b.addEventListener("click", function(){ switchTab(b.getAttribute("data-go")); });
+  });
+  // D-day 모두 보기 / 접기. 고른 상태는 다음에도 그대로 둡니다.
+  $("dday-all").addEventListener("click", function(){
+    ddayAll = !ddayAll;
+    lsSet("a26.ddayAll", ddayAll);
+    render();
   });
 
   /* 로그인 */
