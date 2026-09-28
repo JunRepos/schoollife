@@ -101,6 +101,14 @@
   .notice-body{font-size:13.5px; color:var(--ink-2); line-height:1.6; white-space:pre-wrap; word-break:break-word}
   .flag.imp{background:var(--t-exam); color:#fff}
   .flag.new{background:var(--t-task); color:#fff}
+  .flag.dd{background:var(--t-prep); color:#fff; font-variant-numeric:tabular-nums}
+  .flag.dd.near{background:var(--t-exam)}
+  /* 전달사항 날짜 묶음 머리 */
+  .daygroup{display:flex; align-items:baseline; gap:8px; margin:20px 0 9px}
+  .daygroup:first-child{margin-top:4px}
+  .daygroup b{font-size:14.5px; font-weight:700; color:var(--ink)}
+  .daygroup span{font-size:11.5px; color:var(--muted)}
+  .daygroup i{flex:1; height:1px; background:var(--rule-2)}
   .n-photos{display:flex; gap:8px; flex-wrap:wrap}
   .n-photos .ev-photo{width:96px; height:96px; border-radius:10px}
   .more-btn{border:0; background:transparent; padding:0; font-size:13px; font-weight:600; color:var(--t-task); cursor:pointer; align-self:flex-start; font-family:inherit}
@@ -969,6 +977,16 @@
       <input type="text" id="n-title" autocomplete="off">
     </div>
     <div class="field">
+      <label id="n-date-lb">날짜 — 언제 조·종례에서 전달하나요</label>
+      <button type="button" class="datebtn" id="n-date" aria-labelledby="n-date-lb" aria-haspopup="dialog" aria-expanded="false"><span class="dv"></span><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12.5" rx="2"/><path d="M3 8.5h14M7 2.8v3.2M13 2.8v3.2"/></svg></button>
+    </div>
+    <label class="check-row"><input type="checkbox" id="n-dd-on"> D-day 같이 보이기</label>
+    <div class="field" id="n-dd-field" hidden>
+      <label id="n-dd-lb">며칠 남았는지 셀 날짜</label>
+      <button type="button" class="datebtn" id="n-dday" aria-labelledby="n-dd-lb" aria-haspopup="dialog" aria-expanded="false"><span class="dv"></span><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12.5" rx="2"/><path d="M3 8.5h14M7 2.8v3.2M13 2.8v3.2"/></svg></button>
+      <p class="hint" style="margin-top:6px">고른 날짜까지 ‘D-7’처럼 세어서 전달사항 옆에 붙습니다.</p>
+    </div>
+    <div class="field">
       <label for="n-body">내용</label>
       <div class="rt-tools">
         <button type="button" id="n-tb">표 넣기</button>
@@ -995,7 +1013,7 @@
       <label>사진 — 가정통신문이나 안내문을 찍어 올리면 크게 볼 수 있습니다</label>
       <label class="filepick">
         <b>사진 고르기</b>
-        <span>한 번에 여러 장, 최대 5장</span>
+        <span>한 번에 여러 장, 최대 5장<br>캡처한 사진은 Ctrl+V 로 바로 붙여 넣어도 됩니다</span>
         <input type="file" id="n-photo" accept="image/*" multiple hidden>
       </label>
       <div class="shot-row" id="n-shots"></div>
@@ -2015,10 +2033,14 @@ var FIREBASE_CONFIG = {
     b.appendChild(el("span", null, "서버가 연결되지 않아 이 기기에만 저장됩니다."));
     box.appendChild(b);
   }
+  // 조·종례에서 전달한 날. 예전 글에는 없으니 올린 날로 봅니다.
+  function noticeDate(n){ return n.date || iso(new Date(n.createdAt || Date.now())); }
   function visibleNotices(){
     return State.notices.filter(function(n){ return canNotices() || !n.hidden; })
       .sort(function(a,b){
         if(!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+        var da = noticeDate(a), db = noticeDate(b);
+        if(da !== db) return da < db ? 1 : -1;
         return (b.createdAt||0) - (a.createdAt||0);
       });
   }
@@ -2066,10 +2088,14 @@ var FIREBASE_CONFIG = {
     var meta = el("div", "notice-meta");
     if(n.important) meta.appendChild(el("span", "flag imp", "중요"));
     if(n.pinned) meta.appendChild(el("span", "flag", "고정"));
+    // D-day 를 넣은 전달사항이면 남은 날을 세어 붙입니다.
+    if(n.dday){
+      var left = diffDays(n.dday, TODAY);
+      meta.appendChild(el("span", "flag dd" + (left >= 0 && left <= 7 ? " near" : ""), ddayText(left)));
+    }
     if(!n.hidden && Date.now() - (n.createdAt || 0) < 3 * 86400000) meta.appendChild(el("span", "flag new", "새 글"));
     if(n.hidden) meta.appendChild(el("span", "flag grey", "내림"));
-    var d = new Date(n.createdAt || Date.now());
-    meta.appendChild(el("span", null, (d.getMonth()+1) + "월 " + d.getDate() + "일 (" + DOW_KO[d.getDay()] + ")"));
+    meta.appendChild(el("span", null, mdText(noticeDate(n))));
     if(n.by && n.by !== "선생님") meta.appendChild(el("span", null, (/^\d{5}$/.test(n.by) ? noLabel(n.by) : n.by) + " 올림"));
     card.appendChild(meta);
 
@@ -2120,6 +2146,19 @@ var FIREBASE_CONFIG = {
       card.appendChild(tools);
     }
     return card;
+  }
+  // 날짜 묶음 머리. 오늘·어제·내일은 글자로 알려 줍니다.
+  function dayHead(label, count, key){
+    var h = el("div", "daygroup");
+    h.appendChild(el("b", null, label));
+    if(key){
+      var g = diffDays(key, TODAY);
+      var note = g === 0 ? "오늘" : (g === -1 ? "어제" : (g === 1 ? "내일" : (g > 0 ? "D-" + g : "")));
+      if(note) h.appendChild(el("span", null, note));
+    }
+    h.appendChild(el("i"));
+    h.appendChild(el("span", null, count + "건"));
+    return h;
   }
   function toolBtn(label, fn, danger){
     var b = el("button", danger ? "del" : null, label);
@@ -2359,9 +2398,26 @@ var FIREBASE_CONFIG = {
         box.appendChild(emptyBox("아직 전달사항이 없어요", State.teacher ? "아래 ‘전달사항 쓰기’로 올려 보세요" : "새 공지가 올라오면 여기에 표시됩니다"));
         return;
       }
-      var list = el("div", "notices");
-      ns.forEach(function(n){ list.appendChild(noticeCard(n)); });
-      box.appendChild(list);
+      // 고정한 것을 먼저, 그 뒤는 조·종례 날짜별로 묶어서 보여 줍니다.
+      var pins = ns.filter(function(n){ return n.pinned; });
+      var rest = ns.filter(function(n){ return !n.pinned; });
+      if(pins.length){
+        box.appendChild(dayHead("고정", pins.length));
+        var pl = el("div", "notices");
+        pins.forEach(function(n){ pl.appendChild(noticeCard(n)); });
+        box.appendChild(pl);
+      }
+      var seen = {};
+      rest.forEach(function(n){
+        var k = noticeDate(n);
+        if(seen[k]) return;
+        seen[k] = 1;
+        var day = rest.filter(function(m){ return noticeDate(m) === k; });
+        box.appendChild(dayHead(mdText(k), day.length, k));
+        var wrap = el("div", "notices");
+        day.forEach(function(m){ wrap.appendChild(noticeCard(m)); });
+        box.appendChild(wrap);
+      });
     } else {
       var rbox = $("res-list");
       clear(rbox);
@@ -4581,6 +4637,9 @@ var FIREBASE_CONFIG = {
   window.addEventListener("resize", function(){ if(DP.pop) placeDatePop(); });
 
   $("f-date").addEventListener("click", function(){ openDatePop("f-date", {}); });
+  $("n-date").addEventListener("click", function(){ openDatePop("n-date", {}); });
+  $("n-dday").addEventListener("click", function(){ openDatePop("n-dday", {}); });
+  $("n-dd-on").addEventListener("change", function(){ $("n-dd-field").hidden = !this.checked; });
   $("e-date").addEventListener("click", function(){ openDatePop("e-date", {}); });
   $("m-date").addEventListener("click", function(){
     openDatePop("m-date", {
@@ -4590,9 +4649,33 @@ var FIREBASE_CONFIG = {
   });
 
   /* ---------------- 시트 ---------------- */
+  // 글을 쓰는 시트들. 밖을 눌러 닫을 때 쓰던 내용이 있으면 한 번 더 묻습니다.
+  var GUARD = ["sheet-notice","sheet-event","sheet-entry","sheet-res","sheet-todo","sheet-uni","sheet-move","sheet-book","sheet-role"];
+  var sheetSnap = "";
+  // 지금 열린 시트에 적힌 것을 한 줄로 적어 둡니다(열 때와 닫을 때를 견주려고).
+  function sheetState(){
+    var box = null;
+    GUARD.forEach(function(id){ if($(id) && $(id).classList.contains("open")) box = $(id); });
+    if(!box) return "";
+    var out = [box.id];
+    Array.prototype.forEach.call(box.querySelectorAll("input, textarea, select, .datebtn"), function(f){
+      if(f.type === "file") return;
+      if(f.classList && f.classList.contains("datebtn")) out.push(f.dataset.value || "");
+      else if(f.type === "checkbox" || f.type === "radio") out.push(f.checked ? "1" : "0");
+      else out.push(f.value);
+    });
+    if(box.id === "sheet-notice") out.push("사진" + ntShots.length);
+    return out.join("\u0001");
+  }
   function openSheet(id){
     $("scrim").classList.add("open");
     $(id).classList.add("open");
+    sheetSnap = sheetState();
+  }
+  // 밖을 누르거나 Esc·취소로 닫을 때. 쓰던 내용이 있으면 확인을 받습니다.
+  function askClose(){
+    if(sheetState() !== sheetSnap && !window.confirm("쓰던 내용이 있습니다. 저장하지 않고 닫을까요?")) return;
+    closeSheets();
   }
   function closeSheets(){
     closeDatePop();
@@ -4600,15 +4683,15 @@ var FIREBASE_CONFIG = {
     ["sheet-login","sheet-notice","sheet-res","sheet-event","sheet-book","sheet-move","sheet-entry","sheet-roster","sheet-import","sheet-uni","sheet-pick","sheet-role","sheet-mock","sheet-grant","sheet-todo"]
       .forEach(function(id){ $(id).classList.remove("open"); });
   }
-  $("scrim").addEventListener("click", closeSheets);
+  $("scrim").addEventListener("click", askClose);
   Array.prototype.forEach.call(document.querySelectorAll("[data-close]"), function(b){
-    b.addEventListener("click", closeSheets);
+    b.addEventListener("click", askClose);
   });
   document.addEventListener("keydown", function(e){
     if(e.key !== "Escape") return;
     if($("imgview").classList.contains("open")) closeImage();
     else if(DP.pop) closeDatePop();   // 달력이 열려 있으면 달력만 닫습니다
-    else closeSheets();
+    else askClose();
   });
   Array.prototype.forEach.call(document.querySelectorAll("[data-go]"), function(b){
     b.addEventListener("click", function(){ switchTab(b.getAttribute("data-go")); });
@@ -4712,6 +4795,11 @@ var FIREBASE_CONFIG = {
     $("nt-title").textContent = n ? "전달사항 수정" : "전달사항 쓰기";
     $("n-title").value = n ? n.title : "";
     $("n-body").value = n ? n.body : "";
+    setDate("n-date", (n && n.date) || TODAY);
+    var dd = n && n.dday;
+    $("n-dd-on").checked = !!dd;
+    $("n-dd-field").hidden = !dd;
+    setDate("n-dday", dd || TODAY);
     $("n-pin").checked = n ? !!n.pinned : false;
     $("n-imp").checked = n ? !!n.important : false;
     ntShots = ((n && n.photos) || []).map(function(p){ return {url:p.url, path:p.path}; });
@@ -4728,6 +4816,7 @@ var FIREBASE_CONFIG = {
   function noticeData(n, over){
     var d = {
       title: n.title || "", body: n.body || "", pinned: !!n.pinned, important: !!n.important,
+      date: n.date || "", dday: n.dday || "",
       hidden: !!n.hidden, photos: (n.photos || []).map(function(p){ return {url: p.url, path: p.path || ""}; }),
       by: n.by || "", createdAt: n.createdAt || Date.now(), updatedAt: Date.now()
     };
@@ -4767,6 +4856,7 @@ var FIREBASE_CONFIG = {
       btn.textContent = "저장 중…";
       return put("notices", id, noticeData({
         title: title, body: $("n-body").value.trim(), pinned: $("n-pin").checked, important: $("n-imp").checked,
+        date: getDate("n-date"), dday: $("n-dd-on").checked ? getDate("n-dday") : "",
         hidden: was ? !!was.hidden : false, photos: photos,
         by: was ? (was.by || "") : (State.teacher ? "선생님" : ((State.editor && State.editor.sid) || State.sid || "")),
         createdAt: was ? (was.createdAt || Date.now()) : Date.now()
@@ -4809,17 +4899,39 @@ var FIREBASE_CONFIG = {
       box.appendChild(w);
     });
   }
-  $("n-photo").addEventListener("change", function(e){
-    var files = Array.prototype.slice.call(e.target.files || []);
+  // 고른 사진 · 붙여 넣은 사진을 목록에 더합니다. 더한 장수를 돌려줍니다.
+  function addNtShots(files){
+    var added = 0, full = false;
     $("nt-err").hidden = true;
     files.forEach(function(f){
-      if(ntShots.length >= 5) return;
+      if(ntShots.length >= 5){ full = true; return; }
       if(!/^image\//.test(f.type || "")){ showErr("nt-err", "사진 파일만 올릴 수 있어요."); return; }
       ntShots.push({file: f, preview: URL.createObjectURL(f)});
+      added++;
     });
-    if(files.length && ntShots.length >= 5) showErr("nt-err", "사진은 5장까지만 올라갑니다.");
-    this.value = "";
+    if(full || (files.length && ntShots.length >= 5)) showErr("nt-err", "사진은 5장까지만 올라갑니다.");
     renderNtShots();
+    return added;
+  }
+  $("n-photo").addEventListener("change", function(e){
+    addNtShots(Array.prototype.slice.call(e.target.files || []));
+    this.value = "";
+  });
+  // 화면을 캡처해 Ctrl+V 로 바로 붙여 넣을 수 있습니다(전달사항 쓰기가 열려 있을 때).
+  document.addEventListener("paste", function(e){
+    if(!$("sheet-notice").classList.contains("open")) return;
+    var cd = e.clipboardData;
+    if(!cd) return;
+    var files = [];
+    Array.prototype.forEach.call(cd.items || [], function(it){
+      if(it.kind !== "file" || !/^image\//.test(it.type || "")) return;
+      var f = it.getAsFile();
+      if(f) files.push(f);
+    });
+    if(!files.length) return;
+    e.preventDefault();
+    var n = addNtShots(files);
+    if(n) toast(n + "장 붙여 넣었습니다");
   });
 
   /* 전달사항 글쓰기 도구: 미리보기 · 굵게 · 목록 · 표 */
