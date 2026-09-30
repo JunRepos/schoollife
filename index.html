@@ -1931,6 +1931,26 @@ var FIREBASE_CONFIG = {
     if(!State.teacher) return "선생님으로 로그인해야 저장할 수 있습니다.";
     return "저장하지 못했습니다." + (code ? " (" + code + ")" : "");
   }
+  // Firestore 는 서버가 받아 줄 때까지 약속을 끝내지 않습니다. 인터넷이 끊기면 몇 초를 기다려도
+  // 아무 일이 안 일어나 창이 그대로 열려 있게 됩니다. 그래서 일정 시간이 지나면
+  // ‘기기에 저장해 두고 나중에 올림’으로 보고 창을 닫습니다(적은 내용은 사라지지 않습니다).
+  function withPatience(p, ms){
+    if(!State.cloud) return p.then(function(){ return "saved"; });
+    return new Promise(function(res, rej){
+      var done = false;
+      var t = setTimeout(function(){ if(!done){ done = true; res("queued"); } }, ms || 6000);
+      p.then(function(){
+        if(done) return;
+        done = true; clearTimeout(t); res("saved");
+      }, function(e){
+        if(done) return;
+        done = true; clearTimeout(t); rej(e);
+      });
+    });
+  }
+  function savedToast(how, normal){
+    toast(how === "queued" ? "저장했습니다 — 인터넷이 돌아오면 서버에 올라갑니다" : normal);
+  }
   function showErr(id, msg){
     var n = $(id);
     if(!n){ toast(msg.split("\n")[0]); return; }
@@ -2648,6 +2668,12 @@ var FIREBASE_CONFIG = {
     }
     var ref = FB.db.collection("closures").doc(id);
     return closed ? ref.set({date: date, slot: slot, createdAt: Date.now()}) : ref["delete"]();
+  }
+  // 면담 저장이 규칙에 막혔을 때. 방과후 2(pm2)를 넣지 않은 오래된 규칙이 가장 흔한 까닭입니다.
+  function bookErrText(){
+    return State.teacher
+      ? "Firestore 규칙에 막혔습니다. 규칙의 bookings 부분에 방과후 2(pm2)와 closures 가 들어갔는지 보고 다시 게시해 주세요."
+      : "지금은 신청이 막혀 있어요. 선생님께 말씀드려 주세요.";
   }
   function closeErrText(e){
     if(e && e.code === "permission-denied" && State.teacher)
@@ -4657,6 +4683,7 @@ var FIREBASE_CONFIG = {
           cell.addEventListener("click", function(){
             var id = DP.btn.id, cb = DP.opts.onPick;
             setDate(id, k);
+            markSheetTouched();   // 사람이 날짜를 고른 것이라 ‘쓰던 내용’으로 봅니다
             closeDatePop();
             if(cb) cb(k);
           });
@@ -4677,6 +4704,7 @@ var FIREBASE_CONFIG = {
         return;
       }
       setDate(id, TODAY);
+      markSheetTouched();
       closeDatePop();
       if(cb) cb(TODAY);
     });
@@ -4745,34 +4773,38 @@ var FIREBASE_CONFIG = {
   /* ---------------- 시트 ---------------- */
   // 글을 쓰는 시트들. 밖을 눌러 닫을 때 쓰던 내용이 있으면 한 번 더 묻습니다.
   var GUARD = ["sheet-notice","sheet-event","sheet-entry","sheet-res","sheet-todo","sheet-uni","sheet-move","sheet-book","sheet-role"];
-  var sheetSnap = "";
-  // 지금 열린 시트에 적힌 것을 한 줄로 적어 둡니다(열 때와 닫을 때를 견주려고).
-  function sheetState(){
-    var box = null;
-    GUARD.forEach(function(id){ if($(id) && $(id).classList.contains("open")) box = $(id); });
-    if(!box) return "";
-    var out = [box.id];
-    Array.prototype.forEach.call(box.querySelectorAll("input, textarea, select, .datebtn"), function(f){
-      if(f.type === "file") return;
-      if(f.classList && f.classList.contains("datebtn")) out.push(f.dataset.value || "");
-      else if(f.type === "checkbox" || f.type === "radio") out.push(f.checked ? "1" : "0");
-      else out.push(f.value);
-    });
-    if(box.id === "sheet-notice") out.push("사진" + ntShots.length);
-    return out.join("\u0001");
+  // 사람이 직접 고치거나 적었을 때만 켜집니다. 화면이 새로 그려지는 것으로는 켜지지 않습니다.
+  var sheetTouched = false;
+  function openGuardSheet(){
+    var open = null;
+    GUARD.forEach(function(id){ if($(id) && $(id).classList.contains("open")) open = id; });
+    return open;
   }
+  function markSheetTouched(){ if(openGuardSheet()) sheetTouched = true; }
+  // 시트 안에서 글을 적거나 고르면 ‘쓰던 내용 있음’으로 둡니다(코드가 값을 넣을 때는 이 이벤트가 안 납니다).
+  ["input", "change"].forEach(function(ev){
+    document.addEventListener(ev, function(e){
+      var n = e.target, open = openGuardSheet();
+      if(!open) return;
+      while(n && n !== document){
+        if(n.id === open){ sheetTouched = true; return; }
+        n = n.parentNode;
+      }
+    }, true);
+  });
   function openSheet(id){
     $("scrim").classList.add("open");
     $(id).classList.add("open");
-    sheetSnap = sheetState();
+    sheetTouched = false;
   }
   // 밖을 누르거나 Esc·취소로 닫을 때. 쓰던 내용이 있으면 확인을 받습니다.
   function askClose(){
-    if(sheetState() !== sheetSnap && !window.confirm("쓰던 내용이 있습니다. 저장하지 않고 닫을까요?")) return;
+    if(sheetTouched && !window.confirm("쓰던 내용이 있습니다. 저장하지 않고 닫을까요?")) return;
     closeSheets();
   }
   function closeSheets(){
     closeDatePop();
+    sheetTouched = false;
     $("scrim").classList.remove("open");
     ["sheet-login","sheet-notice","sheet-res","sheet-event","sheet-book","sheet-move","sheet-entry","sheet-roster","sheet-import","sheet-uni","sheet-pick","sheet-role","sheet-mock","sheet-grant","sheet-todo"]
       .forEach(function(id){ $(id).classList.remove("open"); });
@@ -4954,16 +4986,16 @@ var FIREBASE_CONFIG = {
 
     seq.then(function(){
       btn.textContent = "저장 중…";
-      return put("notices", id, noticeData({
+      return withPatience(put("notices", id, noticeData({
         title: title, body: $("n-body").value.trim(), pinned: $("n-pin").checked, important: $("n-imp").checked,
         date: getDate("n-date"), dday: $("n-dd-on").checked ? getDate("n-dday") : "",
         hidden: was ? !!was.hidden : false, photos: photos,
         by: was ? (was.by || "") : (State.teacher ? "선생님" : ((State.editor && State.editor.sid) || State.sid || "")),
         createdAt: was ? (was.createdAt || Date.now()) : Date.now()
-      }), "notices");
-    }).then(function(){
+      }), "notices"));
+    }).then(function(how){
       ntShots = [];
-      closeSheets(); toast(was ? "고쳤습니다" : "올렸습니다");
+      closeSheets(); savedToast(how, was ? "고쳤습니다" : "올렸습니다");
     })["catch"](function(ex){
       showErr("nt-err", (ex && String(ex.code || "").indexOf("storage/") === 0) ? uploadErrText(ex) : saveErrText(ex));
     })["then"](function(){
@@ -4993,6 +5025,7 @@ var FIREBASE_CONFIG = {
       x.addEventListener("click", function(){
         if(sh.preview) URL.revokeObjectURL(sh.preview);
         ntShots.splice(i, 1);
+        markSheetTouched();
         renderNtShots();
       });
       w.appendChild(x);
@@ -5010,6 +5043,7 @@ var FIREBASE_CONFIG = {
       added++;
     });
     if(full || (files.length && ntShots.length >= 5)) showErr("nt-err", "사진은 5장까지만 올라갑니다.");
+    if(added) markSheetTouched();
     renderNtShots();
     return added;
   }
@@ -5057,6 +5091,7 @@ var FIREBASE_CONFIG = {
     var pos = (before + pre + block + post).length;
     ta.focus();
     ta.setSelectionRange(pos, pos);
+    markSheetTouched();
     updateNtPreview();
   }
   // 엑셀 · 한글 표를 복사하면 칸이 탭으로 나뉜 글이 옵니다 → | 표 | 로 바꿉니다.
@@ -5091,6 +5126,7 @@ var FIREBASE_CONFIG = {
     ta.value = ta.value.slice(0, s) + "**" + sel + "**" + ta.value.slice(e);
     ta.focus();
     ta.setSelectionRange(s + 2, s + 2 + sel.length);
+    markSheetTouched();
     updateNtPreview();
   });
   $("n-list").addEventListener("click", function(){
@@ -5101,6 +5137,7 @@ var FIREBASE_CONFIG = {
     ta.value = v.slice(0, ls) + part + v.slice(le);
     ta.focus();
     ta.setSelectionRange(ls + part.length, ls + part.length);
+    markSheetTouched();
     updateNtPreview();
   });
 
@@ -5373,7 +5410,7 @@ var FIREBASE_CONFIG = {
       // 파일을 새로 올렸으면 예전 파일은 지웁니다.
       if(up && resFile && was && was.filePath && was.filePath !== up.path) deleteResFile(was.filePath);
       btn.textContent = "저장 중…";
-      return put("resources", id, {
+      return withPatience(put("resources", id, {
         title:title,
         url: up ? up.url : url,
         desc:$("r-desc").value.trim(), cat:resCat, pinned:$("r-pin").checked,
@@ -5382,9 +5419,9 @@ var FIREBASE_CONFIG = {
         fileSize: up ? up.size : 0,
         fileType: up ? up.type : "",
         createdAt: was ? (was.createdAt || Date.now()) : Date.now()
-      }, "resources");
-    }).then(function(){
-      closeSheets(); toast(was ? "고쳤습니다" : "올렸습니다");
+      }, "resources"));
+    }).then(function(how){
+      closeSheets(); savedToast(how, was ? "고쳤습니다" : "올렸습니다");
     })["catch"](function(ex){
       showErr("rs-err", (ex && String(ex.code || "").indexOf("storage/") === 0) ? uploadErrText(ex) : saveErrText(ex));
     })["then"](function(){
@@ -5508,17 +5545,17 @@ var FIREBASE_CONFIG = {
 
     seq.then(function(){
       btn.textContent = "저장 중…";
-      return put("events", id, {
+      return withPatience(put("events", id, {
         type:sheetType, title:title, date:getDate("f-date"),
         subject:$("f-subject").value.trim(), memo:$("f-memo").value.trim(),
         photos: photos,
         by: State.teacher ? "선생님" : ((State.editor && State.editor.sid) || State.sid || "학생"),
         createdAt: was ? (was.createdAt || Date.now()) : Date.now(),
         updatedAt: Date.now()
-      }, "events");
-    }).then(function(){
+      }, "events"));
+    }).then(function(how){
       evShots = [];
-      closeSheets(); toast(was ? "고쳤습니다" : "올렸습니다");
+      closeSheets(); savedToast(how, was ? "고쳤습니다" : "올렸습니다");
     })["catch"](function(ex){
       showErr("ev-err", (ex && String(ex.code || "").indexOf("storage/") === 0) ? uploadErrText(ex) : saveErrText(ex));
     })["then"](function(){
@@ -5571,12 +5608,22 @@ var FIREBASE_CONFIG = {
       return;
     }
     lsSet("a26.me", {sid:sid});
-    createBooking(bookTarget.date, bookTarget.slot, sid, $("b-reason").value.trim())
-      .then(function(){ closeSheets(); toast("신청했습니다"); })
-      ["catch"](function(){
-        err.textContent = "방금 다른 친구가 예약했거나 선생님이 닫은 시간대예요. 다른 시간대를 골라 주세요.";
+    var bkBtn = $("bk-form").querySelector(".btn.primary");
+    var bkLabel = bkBtn.textContent;
+    bkBtn.disabled = true;
+    bkBtn.textContent = "신청 중…";
+    withPatience(createBooking(bookTarget.date, bookTarget.slot, sid, $("b-reason").value.trim()))
+      .then(function(how){ closeSheets(); savedToast(how, "신청했습니다"); })
+      ["catch"](function(ex){
+        // 규칙 때문에 막힌 것과, 자리가 찬 것을 나눠서 알려 줍니다.
+        err.textContent = (ex && ex.code === "permission-denied")
+          ? bookErrText()
+          : "방금 다른 친구가 예약했거나 선생님이 닫은 시간대예요. 다른 시간대를 골라 주세요.";
         err.hidden = false;
         render();
+      })["then"](function(){
+        bkBtn.disabled = false;
+        bkBtn.textContent = bkLabel;
       });
   });
 
@@ -5614,7 +5661,7 @@ var FIREBASE_CONFIG = {
     var dw = parseISO(nd).getDay();
     if(dw === 0 || dw === 6){ err.textContent = "주말에는 면담 시간이 없습니다."; err.hidden = false; return; }
     if(isClosed(nd, moveSlot)){ err.textContent = "그 시간대는 닫혀 있어요. 먼저 ‘열기’로 열거나 다른 시간대를 골라 주세요."; err.hidden = false; return; }
-    moveBooking(moveFrom.id, nd, moveSlot)
+    withPatience(moveBooking(moveFrom.id, nd, moveSlot))
       .then(function(){
         closeSheets();
         meetDate = nd;
@@ -5662,14 +5709,14 @@ var FIREBASE_CONFIG = {
     var text = $("e-text").value.trim();
     if(!text){ toast("내용을 적어 주세요"); return; }
     var was = editingEntry;
-    saveEntry(State.recSel, {
+    withPatience(saveEntry(State.recSel, {
       id: was ? was.id : uid(),
       date: getDate("e-date"),
       kind: entryKind,
       text: text,
       createdAt: was ? (was.createdAt || Date.now()) : Date.now()
-    }).then(function(){
-      closeSheets(); toast(was ? "고쳤습니다" : "저장했습니다");
+    })).then(function(how){
+      closeSheets(); savedToast(how, was ? "고쳤습니다" : "저장했습니다");
     })["catch"](function(err){ showErr("en-err", saveErrText(err)); });
   });
   $("e-delete").addEventListener("click", function(){
