@@ -111,6 +111,7 @@
   .daygroup i{flex:1; height:1px; background:var(--rule-2)}
   .n-photos{display:flex; gap:8px; flex-wrap:wrap}
   .n-photos .ev-photo{width:96px; height:96px; border-radius:10px}
+  .shot-more{width:96px; height:96px; border-radius:10px; border:1px dashed var(--rule); background:var(--surface-2); color:var(--muted); font-size:14px; font-weight:700; font-family:inherit; cursor:pointer}
   .more-btn{border:0; background:transparent; padding:0; font-size:13px; font-weight:600; color:var(--t-task); cursor:pointer; align-self:flex-start; font-family:inherit}
 
   /* 전달사항 본문 서식 (표 · 목록 · 굵게 · 링크) */
@@ -126,7 +127,7 @@
   .rt table{border-collapse:collapse; font-size:13.5px; min-width:100%; line-height:1.5}
   .rt th, .rt td{border:1px solid var(--rule); padding:7px 10px; text-align:left; vertical-align:top; white-space:pre-wrap}
   .rt th{background:var(--surface-2); font-weight:700}
-  .rt.clamp{max-height:11em; overflow:hidden; -webkit-mask-image:linear-gradient(#000 65%, transparent); mask-image:linear-gradient(#000 65%, transparent)}
+  .rt.clamp{max-height:9em; overflow:hidden; -webkit-mask-image:linear-gradient(#000 65%, transparent); mask-image:linear-gradient(#000 65%, transparent)}
   .rt-tools{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:7px}
   .rt-tools button{border:1px solid var(--rule); background:var(--surface); border-radius:8px; padding:6px 11px; font-size:12.5px; font-weight:600; cursor:pointer; color:var(--ink); font-family:inherit}
   .tb-builder{border:1px solid var(--rule); border-radius:10px; padding:10px; margin-bottom:8px; background:var(--surface)}
@@ -2141,7 +2142,16 @@ var FIREBASE_CONFIG = {
       var body = el("div", "rt");
       body.appendChild(renderRich(n.body));
       var long = n.body.length > 160 || n.body.split("\n").length > 5 || /^\s*\|/m.test(n.body);
-      if(opts.clamp && long && !noticeOpen[n.id]) body.classList.add("clamp");
+      if(opts.clamp && long && !noticeOpen[n.id]){
+        body.classList.add("clamp");
+        // 접힌 글은 아무 데나 눌러도 펼쳐집니다(링크를 누른 것은 빼고).
+        body.addEventListener("click", function(e){
+          var t = e.target;
+          while(t && t !== body){ if(t.tagName === "A" || t.tagName === "BUTTON") return; t = t.parentNode; }
+          noticeOpen[n.id] = true;
+          render();
+        });
+      }
       card.appendChild(body);
       if(opts.clamp && long){
         var mb = el("button", "more-btn", noticeOpen[n.id] ? "접기" : "펼쳐 보기");
@@ -2152,7 +2162,9 @@ var FIREBASE_CONFIG = {
     }
     if(n.photos && n.photos.length){
       var ps = el("div", "n-photos");
-      n.photos.forEach(function(ph, i){
+      // 접혀 있을 때는 사진도 두 장까지만 보여 줍니다.
+      var folded = opts.clamp && !noticeOpen[n.id] && n.photos.length > 2;
+      (folded ? n.photos.slice(0, 2) : n.photos).forEach(function(ph, i){
         var b = el("button", "ev-photo");
         b.type = "button";
         b.setAttribute("aria-label", n.title + " 사진 " + (i+1) + "장째, 눌러서 크게 보기");
@@ -2164,6 +2176,13 @@ var FIREBASE_CONFIG = {
         });
         ps.appendChild(b);
       });
+      if(folded){
+        var mp = el("button", "shot-more", "+" + (n.photos.length - 2));
+        mp.type = "button";
+        mp.setAttribute("aria-label", "사진 " + n.photos.length + "장 모두 보기");
+        mp.addEventListener("click", function(){ noticeOpen[n.id] = true; render(); });
+        ps.appendChild(mp);
+      }
       card.appendChild(ps);
     }
     // 선생님과 ‘전달사항 쓰기’ 권한을 받은 학생. 지우기는 선생님만.
@@ -2518,7 +2537,7 @@ var FIREBASE_CONFIG = {
       if(pins.length){
         box.appendChild(dayHead("고정", pins.length));
         var pl = el("div", "notices");
-        pins.forEach(function(n){ pl.appendChild(noticeCard(n)); });
+        pins.forEach(function(n){ pl.appendChild(noticeCard(n, {clamp: true})); });
         box.appendChild(pl);
       }
       var seen = {};
@@ -2529,7 +2548,7 @@ var FIREBASE_CONFIG = {
         var day = rest.filter(function(m){ return noticeDate(m) === k; });
         box.appendChild(dayHead(mdText(k), day.length, k));
         var wrap = el("div", "notices");
-        day.forEach(function(m){ wrap.appendChild(noticeCard(m)); });
+        day.forEach(function(m){ wrap.appendChild(noticeCard(m, {clamp: true})); });
         box.appendChild(wrap);
       });
     } else {
