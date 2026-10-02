@@ -112,6 +112,7 @@
   .n-photos{display:flex; gap:8px; flex-wrap:wrap}
   .n-photos .ev-photo{width:96px; height:96px; border-radius:10px}
   .shot-more{width:96px; height:96px; border-radius:10px; border:1px dashed var(--rule); background:var(--surface-2); color:var(--muted); font-size:14px; font-weight:700; font-family:inherit; cursor:pointer}
+  .qsnip{font-size:13.5px; color:var(--ink-2); line-height:1.65; word-break:break-word}
   .more-btn{border:0; background:transparent; padding:0; font-size:13px; font-weight:600; color:var(--t-task); cursor:pointer; align-self:flex-start; font-family:inherit}
 
   /* 전달사항 본문 서식 (표 · 목록 · 굵게 · 링크) */
@@ -210,6 +211,14 @@
   .seg{display:flex; gap:4px; background:var(--surface-2); border-radius:10px; padding:3px; margin-bottom:16px}
   .seg button{flex:1; border:0; background:transparent; border-radius:8px; padding:7px 0; font-size:13px; font-weight:600; color:var(--muted); cursor:pointer}
   .seg button[aria-pressed="true"]{background:var(--surface); color:var(--ink); box-shadow:var(--shadow)}
+  .searchbar{display:flex; align-items:center; gap:8px; border:1px solid var(--rule); background:var(--surface); border-radius:10px; padding:0 11px; margin-bottom:14px}
+  .searchbar svg{width:17px; height:17px; flex:0 0 auto; stroke:var(--muted); fill:none; stroke-width:1.7; stroke-linecap:round}
+  .searchbar input{flex:1; min-width:0; border:0; background:transparent; padding:10px 0; font-size:15px; color:var(--ink); font-family:inherit}
+  .searchbar input:focus{outline:none}
+  .searchbar input::-webkit-search-cancel-button{display:none}
+  .searchbar:focus-within{border-color:var(--ink)}
+  .searchbar button{flex:0 0 auto; border:0; background:transparent; color:var(--muted); font-size:14px; cursor:pointer; padding:6px 2px; font-family:inherit}
+  mark{background:var(--mark); color:var(--ink); border-radius:3px; padding:0 1px}
   .chips{display:flex; gap:7px; overflow-x:auto; padding:0 20px 4px; margin:0 -20px; scrollbar-width:none}
   .chips::-webkit-scrollbar{display:none}
   .chip{flex:0 0 auto; border:1px solid var(--rule); background:var(--surface); border-radius:999px; padding:6px 13px; font-size:12.5px; font-weight:500; cursor:pointer; color:var(--ink-2)}
@@ -800,6 +809,11 @@
         <div class="seg" id="notice-seg">
           <button type="button" data-mode="notice" aria-pressed="true">전달사항</button>
           <button type="button" data-mode="res" aria-pressed="false">자료실</button>
+        </div>
+        <div class="searchbar">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2 17 17"/></svg>
+          <input type="search" id="nt-q" placeholder="제목·내용으로 찾기" autocomplete="off" aria-label="전달사항 검색">
+          <button type="button" id="nt-qx" hidden aria-label="검색어 지우기">✕</button>
         </div>
         <div id="notice-demo"></div>
         <div id="notice-list"></div>
@@ -1766,6 +1780,7 @@ var FIREBASE_CONFIG = {
             var v = d.data() || {};
             return {id:d.id, title:v.title||"", body:v.body||"", pinned:!!v.pinned, hidden:!!v.hidden,
                     important:!!v.important, photos: Array.isArray(v.photos) ? v.photos : [], by:v.by||"",
+                    date:v.date||"", dday:v.dday||"",
                     createdAt:v.createdAt||0, updatedAt:v.updatedAt||0};
           });
           render();
@@ -2115,13 +2130,56 @@ var FIREBASE_CONFIG = {
   }
   function myTT(){ return State.sid && STU_ARR[State.sid] ? STU_ARR[State.sid] : CLASS_ARR; }
 
+  /* ---------------- 검색 ---------------- */
+  // 띄어쓴 낱말이 모두 들어 있으면 찾은 것으로 봅니다(대소문자 가리지 않음).
+  function qWords(q){
+    return String(q || "").toLowerCase().split(/\s+/).filter(Boolean);
+  }
+  function qHit(text, words){
+    var t = String(text || "").toLowerCase();
+    for(var i = 0; i < words.length; i++) if(t.indexOf(words[i]) < 0) return false;
+    return true;
+  }
+  // 찾은 낱말에 노란 표시를 하면서 글자를 넣습니다(HTML 을 만들지 않고 노드로).
+  function putHi(box, text, words){
+    var src = String(text || "");
+    if(!words || !words.length){ box.appendChild(document.createTextNode(src)); return box; }
+    var low = src.toLowerCase(), i = 0;
+    while(i < src.length){
+      var at = -1, len = 0;
+      words.forEach(function(w){
+        var p = low.indexOf(w, i);
+        if(p >= 0 && (at < 0 || p < at)){ at = p; len = w.length; }
+      });
+      if(at < 0) break;
+      if(at > i) box.appendChild(document.createTextNode(src.slice(i, at)));
+      box.appendChild(el("mark", null, src.slice(at, at + len)));
+      i = at + len;
+    }
+    if(i < src.length) box.appendChild(document.createTextNode(src.slice(i)));
+    return box;
+  }
+  // 글에서 찾은 낱말 둘레만 잘라 보여 줍니다(접힌 카드에서 어디가 걸렸는지 알 수 있게).
+  function qSnippet(body, words){
+    var src = String(body || "").replace(/\s+/g, " ").trim();
+    if(!src) return "";
+    var low = src.toLowerCase(), at = -1;
+    words.forEach(function(w){
+      var p = low.indexOf(w);
+      if(p >= 0 && (at < 0 || p < at)) at = p;
+    });
+    if(at < 0) return src.slice(0, 80) + (src.length > 80 ? "…" : "");
+    var from = Math.max(0, at - 30), to = Math.min(src.length, at + 70);
+    return (from > 0 ? "…" : "") + src.slice(from, to) + (to < src.length ? "…" : "");
+  }
+
   // opts.clamp: 첫 화면처럼 좁은 곳에서는 긴 글을 접어 두고 ‘펼쳐 보기’
   var noticeOpen = {};
   function noticeCard(n, opts){
     opts = opts || {};
     var card = el("div", "notice" + (n.pinned ? " pin" : "") + (n.important ? " imp" : "") + (n.hidden ? " off" : ""));
     var head = el("div", "notice-head");
-    head.appendChild(el("div", "notice-title", n.title));
+    head.appendChild(putHi(el("div", "notice-title"), n.title, opts.q));
     card.appendChild(head);
 
     var meta = el("div", "notice-meta");
@@ -2138,7 +2196,14 @@ var FIREBASE_CONFIG = {
     if(n.by && n.by !== "선생님") meta.appendChild(el("span", null, (/^\d{5}$/.test(n.by) ? noLabel(n.by) : n.by) + " 올림"));
     card.appendChild(meta);
 
-    if(n.body){
+    if(n.body && opts.q && opts.q.length && !noticeOpen[n.id]){
+      // 찾는 중에는 걸린 대목만 한 줄로 보여 줍니다.
+      card.appendChild(putHi(el("div", "qsnip"), qSnippet(n.body, opts.q), opts.q));
+      var sb = el("button", "more-btn", "펼쳐 보기");
+      sb.type = "button";
+      sb.addEventListener("click", function(){ noticeOpen[n.id] = true; render(); });
+      card.appendChild(sb);
+    } else if(n.body){
       var body = el("div", "rt");
       body.appendChild(renderRich(n.body));
       var long = n.body.length > 160 || n.body.split("\n").length > 5 || /^\s*\|/m.test(n.body);
@@ -2291,15 +2356,16 @@ var FIREBASE_CONFIG = {
     return b;
   }
 
-  function resourceCard(r){
+  function resourceCard(r, words){
     var card = el("div", "res");
     var body = el("div", "res-body");
     var t = el("div", "res-title");
     if(r.url){
-      var a = el("a", null, r.title);
+      var a = el("a");
+      putHi(a, r.title, words);
       a.href = r.url; a.target = "_blank"; a.rel = "noopener noreferrer";
       t.appendChild(a);
-    } else t.textContent = r.title;
+    } else putHi(t, r.title, words);
     body.appendChild(t);
     var meta = el("div", "res-meta");
     if(r.pinned) meta.appendChild(el("span", "flag", "고정"));
@@ -2515,7 +2581,7 @@ var FIREBASE_CONFIG = {
   }
 
   /* ---------------- 전달사항 · 자료실 ---------------- */
-  var noticeMode = "notice", resFilter = "all";
+  var noticeMode = "notice", resFilter = "all", noticeQ = "";
   function renderNoticeView(){
     $("notice-list").hidden = noticeMode !== "notice";
     $("res-list").hidden = noticeMode !== "res";
@@ -2523,12 +2589,31 @@ var FIREBASE_CONFIG = {
       b.setAttribute("aria-pressed", b.getAttribute("data-mode") === noticeMode ? "true" : "false");
     });
     fillDemo("notice-demo");
+    var words = qWords(noticeQ);
+    $("nt-q").placeholder = noticeMode === "notice" ? "제목·내용으로 찾기" : "자료 이름으로 찾기";
+    $("nt-q").setAttribute("aria-label", noticeMode === "notice" ? "전달사항 검색" : "자료실 검색");
+    $("nt-qx").hidden = !noticeQ;
     if(noticeMode === "notice"){
       var box = $("notice-list");
       clear(box);
       var ns = visibleNotices();
       if(!ns.length){
         box.appendChild(emptyBox("아직 전달사항이 없어요", State.teacher ? "아래 ‘전달사항 쓰기’로 올려 보세요" : "새 공지가 올라오면 여기에 표시됩니다"));
+        return;
+      }
+      // 찾는 중에는 날짜 묶음 없이 찾은 것만 쭉 보여 줍니다.
+      if(words.length){
+        var hits = ns.filter(function(n){
+          return qHit((n.title || "") + " " + (n.body || "") + " " + mdText(noticeDate(n)), words);
+        });
+        box.appendChild(dayHead("검색 결과", hits.length));
+        if(!hits.length){
+          box.appendChild(emptyBox("찾은 전달사항이 없어요", "다른 낱말로 찾아보세요"));
+          return;
+        }
+        var hw = el("div", "notices");
+        hits.forEach(function(n){ hw.appendChild(noticeCard(n, {clamp: true, q: words})); });
+        box.appendChild(hw);
         return;
       }
       // 고정한 것을 먼저, 그 뒤는 조·종례 날짜별로 묶어서 보여 줍니다.
@@ -2555,8 +2640,15 @@ var FIREBASE_CONFIG = {
       var rbox = $("res-list");
       clear(rbox);
       var rs = sortedResources();
+      if(words.length){
+        rs = rs.filter(function(r){
+          return qHit((r.title || "") + " " + (r.desc || "") + " " + (r.fileName || ""), words);
+        });
+      }
       if(!rs.length){
-        rbox.appendChild(emptyBox("아직 올라온 자료가 없어요", State.teacher ? "가정통신문과 진로·진학 자료를 올리면 학생들이 여기서 봅니다" : "선생님이 올린 자료가 여기에 모입니다"));
+        rbox.appendChild(words.length
+          ? emptyBox("찾은 자료가 없어요", "다른 낱말로 찾아보세요")
+          : emptyBox("아직 올라온 자료가 없어요", State.teacher ? "가정통신문과 진로·진학 자료를 올리면 학생들이 여기서 봅니다" : "선생님이 올린 자료가 여기에 모입니다"));
         return;
       }
       // 전체 / 학교 · 가정통신문 / 진로 · 진학
@@ -2573,13 +2665,14 @@ var FIREBASE_CONFIG = {
       CATS.forEach(function(c){
         if(resFilter !== "all" && resFilter !== c.id) return;
         var list = rs.filter(function(r){ return resCatOf(r) === c.id; });
+        if(!list.length && words.length) return;   // 찾는 중에는 빈 갈래를 아예 숨깁니다
         var h = el("div", "sec-head res-group");
         h.appendChild(el("h2", null, c.label));
         h.appendChild(el("span", "sec-note", list.length + "개"));
         rbox.appendChild(h);
         if(!list.length){ rbox.appendChild(emptyBox("아직 자료가 없어요", "")); return; }
         var wrap = el("div", "notices");
-        list.forEach(function(r){ wrap.appendChild(resourceCard(r)); });
+        list.forEach(function(r){ wrap.appendChild(resourceCard(r, words)); });
         rbox.appendChild(wrap);
       });
     }
@@ -7453,6 +7546,18 @@ var FIREBASE_CONFIG = {
   });
   Array.prototype.forEach.call($("notice-seg").children, function(b){
     b.addEventListener("click", function(){ noticeMode = b.getAttribute("data-mode"); renderNoticeView(); renderFab(); });
+  });
+  // 전달사항 · 자료실 찾기
+  function setNoticeQ(v){
+    noticeQ = v;
+    $("nt-q").value = v;
+    $("nt-qx").hidden = !v;
+    renderNoticeView();
+  }
+  $("nt-q").addEventListener("input", function(){ setNoticeQ(this.value); });
+  $("nt-qx").addEventListener("click", function(){ setNoticeQ(""); $("nt-q").focus(); });
+  $("nt-q").addEventListener("keydown", function(e){
+    if(e.key === "Escape"){ e.stopPropagation(); setNoticeQ(""); }   // Esc 는 검색어만 지웁니다
   });
   // 월간은 한 달씩, 주간은 한 주씩 넘깁니다.
   function calStep(dir){
