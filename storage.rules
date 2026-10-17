@@ -38,6 +38,15 @@ service firebase.storage {
       allow update, delete: if isTeacher();
     }
 
+    // 동아리 알리미 사진 — 로그인한 기기(선생님, 코드를 넣은 부원)만 올릴 수 있습니다.
+    match /club/{docId}/{fileName} {
+      allow read: if true;
+      allow create: if request.auth != null
+                    && request.resource.size < 8 * 1024 * 1024
+                    && request.resource.contentType.matches('image/.*');
+      allow update, delete: if request.auth != null;
+    }
+
     // 그 밖의 모든 경로는 차단
     match /{allPaths=**} {
       allow read, write: if false;
