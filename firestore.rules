@@ -203,11 +203,28 @@ service cloud.firestore {
                         && request.resource.data.code == clubJoinCode());
       allow delete: if isTeacher() || (request.auth != null && request.auth.uid == uid);
     }
-    // 모임 기록 · 해올 것: 누구나 읽기, 선생님만 쓰기
+    // 모임 기록: 누구나 읽기. 선생님은 바로 쓰고, 부원은 ‘초안’으로만 쓰고 자기 초안만 고칩니다.
     match /clubMeetings/{id} {
       allow read: if true;
+      allow create: if isTeacher()
+                    || (isClubMember()
+                        && request.resource.data.draft == true
+                        && request.resource.data.byUid == request.auth.uid);
+      allow update: if isTeacher()
+                    || (isClubMember()
+                        && resource.data.draft == true && resource.data.byUid == request.auth.uid
+                        && request.resource.data.draft == true
+                        && request.resource.data.byUid == request.auth.uid);
+      allow delete: if isTeacher()
+                    || (isClubMember() && resource.data.draft == true
+                        && resource.data.byUid == request.auth.uid);
+    }
+    // 프로젝트(신문 한 호처럼 몇 주짜리 일): 부원과 선생님이 보고, 선생님만 씁니다.
+    match /clubProjects/{id} {
+      allow read: if isTeacher() || isClubMember();
       allow write: if isTeacher();
     }
+    // 해올 것: 누구나 읽기, 선생님만 쓰기
     match /clubTasks/{id} {
       allow read: if true;
       allow write: if isTeacher();
