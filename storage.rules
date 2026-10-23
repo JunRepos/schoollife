@@ -38,20 +38,11 @@ service firebase.storage {
       allow update, delete: if isTeacher();
     }
 
-    // 동아리 알리미 파일(PDF·한글·슬라이드 등) — 로그인한 기기만, 한 파일 30MB 까지.
-    match /clubfiles/{docId}/{fileName} {
+    // 진로방송부 스튜디오 — 사진·원고·대본 파일. 로그인한 기기(선생님, 코드를 넣은 부원)만, 한 파일 30MB.
+    match /bc/{docId}/{fileName} {
       allow read: if true;
       allow create: if request.auth != null
                     && request.resource.size < 30 * 1024 * 1024;
-      allow update, delete: if request.auth != null;
-    }
-
-    // 동아리 알리미 사진 — 로그인한 기기(선생님, 코드를 넣은 부원)만 올릴 수 있습니다.
-    match /club/{docId}/{fileName} {
-      allow read: if true;
-      allow create: if request.auth != null
-                    && request.resource.size < 8 * 1024 * 1024
-                    && request.resource.contentType.matches('image/.*');
       allow update, delete: if request.auth != null;
     }
 
