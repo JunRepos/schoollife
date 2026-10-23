@@ -225,6 +225,11 @@ service cloud.firestore {
                     || (isBcMember() && resource.data.status == 'pitch'
                         && resource.data.byUid == request.auth.uid);
     }
+    // 일정(리허설·장비 점검·회의 등): 누구나 읽기(캘린더), 선생님만 쓰기
+    match /bcEvents/{id} {
+      allow read: if true;
+      allow write: if isTeacher();
+    }
     // 원고·대본 · 피드백: 부원끼리 보고, 자기 것만 고치고 지웁니다.
     match /bcItems/{id} {
       allow read: if isTeacher() || isBcMember();
