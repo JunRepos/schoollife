@@ -171,7 +171,7 @@ service cloud.firestore {
     //   https://github.com/JunRepos/bangsong
     //   반 사이트 자료와 완전히 따로, bc… 로 시작하는 곳만 씁니다.
     //   부원은 학번 + 비밀번호로 로그인합니다(계정 이메일 bc학번@example.com).
-    //   처음 가입할 때 선생님 명단(bcRoster)의 이름과 방송부 코드가 맞아야 부원이 됩니다.
+    //   처음 가입할 때 방송부 코드가 맞아야 부원이 됩니다.
     // ══════════════════════════════════════════════════════════════
     function isBcMember() {
       return request.auth != null
@@ -190,19 +190,16 @@ service cloud.firestore {
     match /bcJoin/{id} {
       allow read, write: if isTeacher();
     }
-    // 부원 명단(학번 → 이름): 선생님만 읽고 씁니다. 가입할 때는 규칙 안에서만 맞춰 봅니다.
-    match /bcRoster/{sid} {
-      allow read, write: if isTeacher();
-    }
-    // 부원 가입: 학번 계정으로 로그인한 본인이, 명단과 같은 이름 + 방송부 코드로 한 장 만듭니다.
+    // 부원 가입: 학번 계정으로 로그인한 본인이, 방송부 코드로 한 장 만듭니다.
     function bcJoinOk(uid) {
       return request.auth != null && request.auth.uid == uid
           && request.resource.data.keys().hasOnly(['sid', 'code', 'name', 'joinedAt'])
           && request.resource.data.sid is string
           && request.resource.data.sid.matches('^[0-9]{3,8}$')
           && request.auth.token.email == 'bc' + request.resource.data.sid + '@example.com'
-          && exists(/databases/$(database)/documents/bcRoster/$(request.resource.data.sid))
-          && get(/databases/$(database)/documents/bcRoster/$(request.resource.data.sid)).data.name == request.resource.data.name
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 20
           && request.resource.data.code == bcJoinCode();
     }
     match /bcMembers/{uid} {
