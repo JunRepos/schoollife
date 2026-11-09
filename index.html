@@ -265,6 +265,11 @@
 
   /* 편집 권한 */
   .perm-label{font-size:12px; font-weight:600; color:var(--muted); margin:2px 0 6px}
+  .evlog{margin:4px 0 12px; padding:10px 12px; border:1px solid var(--rule); border-radius:12px}
+  .evlog-row{padding:6px 0; border-top:1px solid var(--rule)}
+  .evlog-row:first-of-type{border-top:0}
+  .evlog-head{font-size:12px; color:var(--muted)}
+  .evlog-what{font-size:14px; word-break:break-all}
   .grant{display:flex; align-items:center; gap:8px 12px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--rule); border-radius:11px; padding:10px 12px; margin-bottom:8px}
   .grant-who{font-weight:700; font-size:14px; min-width:60px}
   .grant-scopes{display:flex; gap:5px; flex-wrap:wrap; flex:1}
@@ -953,7 +958,7 @@
     <button type="button" class="login-opt" id="lg-pick-student">
       <b>학번으로 보기</b><span>2학년 6반 학생 — 내 시간표와 면담 예약</span>
     </button>
-    <button type="button" class="login-opt" id="lg-pick-code">
+    <button type="button" class="login-opt" id="lg-pick-code" hidden>
       <b>편집 권한 코드 넣기</b><span>선생님께 코드를 받은 학생 — 일정·전달사항 관리</span>
     </button>
     <button type="button" class="login-opt" id="lg-pick-teacher">
@@ -1143,6 +1148,7 @@
       </label>
       <div class="shot-row" id="f-shots"></div>
     </div>
+    <div class="evlog" id="ev-log" hidden></div>
     <p class="form-err" id="ev-err" hidden></p>
     <div class="sheet-actions">
       <button type="button" class="btn danger" id="f-delete" hidden>삭제</button>
@@ -1466,6 +1472,9 @@ var FIREBASE_CONFIG = {
   storageBucket: "schoollife-ad0f3.firebasestorage.app",   // 자료실 파일 보관
   appId: "1:860681470819:web:5baad950d919a8457c4956"
 };
+// App Check(reCAPTCHA v3) 사이트 키. 넣으면 이 사이트에서 온 요청만 받도록 막을 수 있습니다(README ‘App Check’).
+// 비워 두면 쓰지 않습니다.
+var APP_CHECK_SITE_KEY = "";
 </script>
 <script src="ttdata.js"></script>
 <script src="ipgyeol.js"></script>
@@ -1689,7 +1698,7 @@ var FIREBASE_CONFIG = {
     grades:{}, unis:[], sb:{}, recMode:"rec", scoreMode:"area", ipOpen:{},
     roles:null, rolesErr:"",
     mocks:[], mockSel:"", mockStu:"",
-    perm:{eventsOpen:true}, editor:null, invites:[], editors:[], permErr:"",
+    perm:{eventsOpen:true}, editor:null, invites:[], editors:[], permErr:"", evLogs:null,
     closures:{}, todos:[]
   };
 
@@ -1708,7 +1717,7 @@ var FIREBASE_CONFIG = {
       State.roles = lr ? normRoles(lr) : null;
       State.mocks = lsGet("a26.mocks") || [];
       State.perm = lsGet("a26.perm") || {eventsOpen:true};
-      State.editor = lsGet("a26.editor");
+      State.editor = null;
       State.invites = lsGet("a26.invites") || [];
       State.closures = lsGet("a26.closures") || {};
       State.todos = lsGet("a26.todos") || [];
@@ -1746,29 +1755,38 @@ var FIREBASE_CONFIG = {
       .then(function(){ return loadScript(base + "firebase-auth-compat.js"); })
       .then(function(){ return loadScript(base + "firebase-firestore-compat.js"); })
       .then(function(){ return loadScript(base + "firebase-storage-compat.js"); })
+      .then(function(){ return APP_CHECK_SITE_KEY ? loadScript(base + "firebase-app-check-compat.js") : null; })
       .then(function(){
         var cfg = {};
         Object.keys(FIREBASE_CONFIG).forEach(function(k){ if(FIREBASE_CONFIG[k]) cfg[k] = FIREBASE_CONFIG[k]; });
         if(!cfg.authDomain && cfg.projectId) cfg.authDomain = cfg.projectId + ".firebaseapp.com";
         firebase.initializeApp(cfg);
+        if(APP_CHECK_SITE_KEY){
+          try { firebase.appCheck().activate(new firebase.appCheck.ReCaptchaV3Provider(APP_CHECK_SITE_KEY), true); }
+          catch(e){ console.warn(e); }
+        }
         FB.db = firebase.firestore();
         FB.auth = firebase.auth();
         try { FB.st = firebase.storage(); } catch(e){ FB.st = null; }
         State.cloud = true;
+        // 로그인 상태를 기기에서 다 불러올 때까지 기다리는 약속 (ensureAuth 가 씁니다)
+        FB.authReady = new Promise(function(res){
+          var off = FB.auth.onAuthStateChanged(function(){ off(); res(); });
+        });
 
         FB.auth.onAuthStateChanged(function(u){
-          // 익명 로그인은 ‘편집 권한’을 받은 학생 기기입니다. 선생님이 아닙니다.
-          var isT = !!u && !u.isAnonymous;
+          // 익명 로그인(학생 기기)과 방송부 부원 계정은 학생입니다. 선생님이 아닙니다.
+          var isT = !!u && !isStudentAccount(u);
           State.user = u;
           State.teacher = isT;
-          watchEditor(u && u.isAnonymous ? u.uid : null);
+          watchEditor(null);   // 학생 편집 권한은 쓰지 않습니다
           if(isT) watchRoster();
           else {
             State.invites = []; State.editors = [];
             if(unsubRoster){ unsubRoster(); unsubRoster = null; }
             if(unsubEntries){ unsubEntries(); unsubEntries = null; }
             State.roster = {}; State.details = {}; State.entries = []; State.entriesFor = "";
-            State.grades = {}; State.unis = []; State.mocks = []; State.mockStu = ""; State.todos = []; State.sb = {};
+            State.grades = {}; State.unis = []; State.mocks = []; State.mockStu = ""; State.todos = []; State.sb = {}; State.evLogs = null;
             if(activeTab === "rec" || activeTab === "mock" || activeTab === "todo") switchTab("home");
           }
           applyWide();
@@ -1801,7 +1819,7 @@ var FIREBASE_CONFIG = {
           State.events = snap.docs.map(function(d){
             var v = d.data() || {};
             return {id:d.id, type:v.type||"etc", title:v.title||"", subject:v.subject||"",
-                    date:v.date||TODAY, memo:v.memo||"", by:v.by||"",
+                    date:v.date||TODAY, memo:v.memo||"", by:v.by||"", uid:v.uid||"",
                     photos: Array.isArray(v.photos) ? v.photos : [],
                     createdAt:v.createdAt||0, updatedAt:v.updatedAt||0};
           });
@@ -1832,7 +1850,7 @@ var FIREBASE_CONFIG = {
         FB.db.collection("bookings").onSnapshot(function(snap){
           State.bookings = snap.docs.map(function(d){
             var v = d.data() || {};
-            return {id:d.id, date:v.date||"", slot:v.slot||"", client:v.client||""};
+            return {id:d.id, date:v.date||"", slot:v.slot||"", client:v.client||"", uid:v.uid||""};
           });
           render();
         }, quiet);
@@ -1936,6 +1954,10 @@ var FIREBASE_CONFIG = {
   // 저장에 실패했을 때, 왜 실패했는지 그대로 알려 줍니다.
   function saveErrText(e){
     var code = (e && e.code) || "";
+    if(code === "auth/operation-not-allowed" || code === "auth/admin-restricted-operation")
+      return "아직 학생 쓰기 기능이 켜져 있지 않아요. 선생님께 말씀드려 주세요.\n(Firebase → Authentication → 로그인 방법 → 익명 사용 설정)";
+    if(code === "auth/network-request-failed")
+      return "인터넷에 연결되지 않았어요. 연결을 확인하고 다시 시도해 주세요.";
     if(code === "permission-denied"){
       if(!State.teacher) return "지금은 올릴 수 없게 막혀 있어요. 선생님께 말씀드려 주세요.";
       var who = (State.user && State.user.email) || "(로그인 정보 없음)";
@@ -1973,6 +1995,59 @@ var FIREBASE_CONFIG = {
     n.textContent = msg;
     n.style.whiteSpace = "pre-wrap";
     n.hidden = false;
+  }
+
+  // 서버에 쓰기 전에 로그인된 기기인지 확인합니다. 학생은 여기서 익명 로그인을 합니다.
+  // 기기마다 uid 가 하나 생겨, 누가(어느 기기가) 썼는지 서버 규칙과 기록에 남습니다.
+  function ensureAuth(){
+    if(!State.cloud) return Promise.resolve(null);
+    return (FB.authReady || Promise.resolve()).then(function(){
+      var u = FB.auth.currentUser;
+      if(u) return u;
+      return FB.auth.signInAnonymously().then(function(c){ return c.user; });
+    });
+  }
+  // 학생 쪽 로그인인지: 이 사이트의 익명 로그인, 또는 방송부 사이트의 부원 계정(bc학번@example.com).
+  // 방송부 사이트도 같은 주소(junrepos.github.io)·같은 Firebase 라서 그쪽 로그인이 여기에도 그대로 보입니다.
+  function isStudentAccount(u){
+    return !!u && (u.isAnonymous || /^bc\d+@example\.com$/i.test(u.email || ""));
+  }
+  function myUid(){
+    return (State.cloud && FB.auth && FB.auth.currentUser) ? FB.auth.currentUser.uid : "";
+  }
+
+  // 일정 쓰기: 일정과 기록(eventLogs) 한 장을 한 번에(배치) 씁니다. 규칙이 둘이 짝이 맞는지 확인합니다.
+  function eventLogData(id, ev, action, uidNow){
+    return {
+      eventId: id, action: action, uid: uidNow,
+      by: ev.by || "", sidHint: String(State.sid || "").slice(0, 10), client: String(CLIENT || "").slice(0, 40),
+      type: ev.type || "", title: ev.title || "", date: ev.date || "",
+      subject: ev.subject || "", memo: ev.memo || "",
+      photos: (ev.photos || []).length,
+      ua: String((navigator && navigator.userAgent) || "").slice(0, 300),
+      at: firebase.firestore.FieldValue.serverTimestamp()
+    };
+  }
+  function saveEvent(id, data, isNew){
+    if(!State.cloud) return put("events", id, data, "events");
+    var user = FB.auth.currentUser;
+    var logId = uid();
+    var body = {};
+    Object.keys(data).forEach(function(k){ body[k] = data[k]; });
+    body.logId = logId;
+    var batch = FB.db.batch();
+    batch.set(FB.db.collection("events").doc(id), body);
+    batch.set(FB.db.collection("eventLogs").doc(logId), eventLogData(id, body, isNew ? "create" : "update", user.uid));
+    return batch.commit();
+  }
+  function dropEvent(ev){
+    if(!State.cloud) return drop("events", ev.id, "events");
+    return ensureAuth().then(function(user){
+      var batch = FB.db.batch();
+      batch["delete"](FB.db.collection("events").doc(ev.id));
+      batch.set(FB.db.collection("eventLogs").doc(ev.id + "_del"), eventLogData(ev.id, ev, "delete", user.uid));
+      return batch.commit();
+    });
   }
 
   function put(coll, id, data, localArr){
@@ -2023,20 +2098,25 @@ var FIREBASE_CONFIG = {
     return nm ? sid + " " + nm : sid;
   }
 
-  function createBooking(date, slot, sid, reason, client){
+  // ownerUid: 선생님이 예약을 옮길 때 원래 신청한 기기를 그대로 남기려고 넘깁니다.
+  function createBooking(date, slot, sid, reason, client, ownerUid){
     var id = bookingId(date, slot);
     var owner = client || CLIENT;
     if(State.cloud){
+      var ouid = "";
       // 자리 잡기는 create 라서 이미 찬 자리면 서버가 거부합니다.
-      return FB.db.collection("bookings").doc(id)
-        .set({date:date, slot:slot, client:owner, createdAt:Date.now()})
+      return ensureAuth().then(function(user){
+        ouid = (typeof ownerUid === "string") ? ownerUid : user.uid;
+        return FB.db.collection("bookings").doc(id)
+          .set({date:date, slot:slot, client:owner, uid:ouid, createdAt:Date.now()});
+      })
         .then(function(){
           // 지난 신청의 찌꺼기가 남아 있으면 먼저 치웁니다.
           return FB.db.collection("bookingDetails").doc(id)["delete"]()["catch"](function(){});
         })
         .then(function(){
           return FB.db.collection("bookingDetails").doc(id).set({
-            name:"", klass:sid, reason:reason, client:owner, createdAt:Date.now()
+            name:"", klass:String(sid || "").slice(0, 10), reason:reason, client:owner, uid:ouid, createdAt:Date.now()
           });
         });
     }
@@ -2067,7 +2147,7 @@ var FIREBASE_CONFIG = {
     var d = State.details[oldId] || {};
     var old = null;
     State.bookings.forEach(function(b){ if(b.id === oldId) old = b; });
-    return createBooking(newDate, newSlot, d.klass || "", d.reason || "", (old && old.client) || CLIENT)
+    return createBooking(newDate, newSlot, d.klass || "", d.reason || "", (old && old.client) || CLIENT, (old && old.uid) || "")
       .then(function(){ return cancelBooking(oldId); });
   }
 
@@ -2399,7 +2479,7 @@ var FIREBASE_CONFIG = {
   function eventRow(ev, opts){
     opts = opts || {};
     var tp = TYPE_MAP[ev.type] || TYPE_MAP.etc;
-    var row = el("div", "ev" + ((ev.builtin || !eventsWritable()) ? " builtin" : " tap"));
+    var row = el("div", "ev" + (!canEditEvent(ev) ? " builtin" : " tap"));
     row.style.setProperty("--tc", tp.color);
     var body = el("div", "ev-body");
     body.appendChild(el("div", "ev-title", ev.title));
@@ -2436,7 +2516,7 @@ var FIREBASE_CONFIG = {
       if(n < 0 && ev.end && diffDays(ev.end, TODAY) >= 0) n = 0;   // 시험 기간 중에는 D-DAY
       row.appendChild(el("div", "ev-dday" + (n < 0 ? " past" : ""), ddayText(n)));
     }
-    if(ev.builtin || !eventsWritable()) return row;   // 학사일정, 또는 일정을 고칠 권한이 없을 때
+    if(!canEditEvent(ev)) return row;   // 학사일정, 또는 이 일정을 고칠 권한이 없을 때
     row.tabIndex = 0;
     row.setAttribute("role", "button");
     row.addEventListener("click", function(){ openEvent(ev); });
@@ -2846,7 +2926,11 @@ var FIREBASE_CONFIG = {
       cbtn.type = "button";
       cbtn.addEventListener("click", function(){
         if(!window.confirm("이 예약을 취소할까요?")) return;
-        cancelBooking(booking.id).then(function(){ toast("취소했습니다"); });
+        cancelBooking(booking.id).then(function(){ toast("취소했습니다"); })["catch"](function(e){
+          toast((e && e.code === "permission-denied" && !State.teacher)
+            ? "이 기기에서 신청한 예약이 아니라서 취소하지 못했어요. 선생님께 말씀드려 주세요."
+            : saveErrText(e).split("\n")[0]);
+        });
       });
       card.appendChild(cbtn);
     } else {
@@ -4717,7 +4801,8 @@ var FIREBASE_CONFIG = {
     var path = folder + "/" + docId + "/" + Date.now().toString(36) + "_" + name;
     var task = FB.st.ref(path).put(file, {
       contentType: file.type || "image/jpeg",
-      contentDisposition: "inline"
+      contentDisposition: "inline",
+      customMetadata: {uid: myUid()}   // 올린 기기 — Storage 규칙이 확인합니다
     });
     return new Promise(function(res, rej){
       task.on("state_changed",
@@ -5610,13 +5695,10 @@ var FIREBASE_CONFIG = {
     setDate("f-date", ev.date || TODAY);
     $("f-subject").value = ev.subject || "";
     $("f-memo").value = ev.memo || "";
-    $("f-delete").hidden = !editingEvent || !canEvents();   // 삭제는 선생님과 ‘일정 관리’ 권한 학생
-    $("ev-lead").textContent = State.teacher
-      ? "수행평가·지필고사·학교 행사 일정을 학생들에게 알립니다."
-      : (canEvents()
-        ? "일정 관리 권한이 있어요. 반 일정을 올리고 고치고 지울 수 있습니다."
-        : "반 친구들이 같이 보는 일정입니다. 잘못 올렸으면 다시 눌러 고칠 수 있어요. 지우는 건 선생님만 됩니다.");
+    $("f-delete").hidden = !editingEvent || !canEvents();
+    $("ev-lead").textContent = "수행평가·지필고사·학교 행사 일정을 학생들에게 알립니다.";
     $("ev-err").hidden = true;
+    renderEventLog(editingEvent);
     renderTypePicks();
     var dl = $("subject-list");
     clear(dl);
@@ -5628,6 +5710,52 @@ var FIREBASE_CONFIG = {
     openSheet("sheet-event");
     if(!editingEvent) setTimeout(function(){ $("f-title").focus(); }, 280);
   }
+  // 선생님: 이 일정이 언제 어느 기기에서 올라오고 바뀌었는지
+  function logWhen(at){
+    var d = at && at.toDate ? at.toDate() : null;
+    if(!d) return "방금";
+    var p = function(n){ return (n < 10 ? "0" : "") + n; };
+    return (d.getMonth() + 1) + "/" + d.getDate() + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+  var LOG_ACT = {create:"올림", update:"고침", "delete":"지움"};
+  function deviceLabel(u){
+    if(!u) return "기기 없음";
+    var ed = (State.editors || []).filter(function(e){ return e.uid === u; })[0];
+    return "기기 " + u.slice(0, 6) + (ed ? " (권한 " + seatLabel(ed.sid) + ")" : "");
+  }
+  function logLine(x, withTitle){
+    var row = el("div", "evlog-row");
+    var head = logWhen(x.at) + " · " + (LOG_ACT[x.action] || x.action) + " · " + deviceLabel(x.uid);
+    if(x.sidHint) head += " · 적어 둔 학번 " + x.sidHint;
+    row.appendChild(el("div", "evlog-head", head));
+    var what = (withTitle || x.action !== "create" ? "‘" + x.title + "’ " : "") + (x.date ? mdText(x.date) : "") +
+               (x.memo ? " — " + x.memo : "");
+    row.appendChild(el("div", "evlog-what", what));
+    return row;
+  }
+  function renderEventLog(ev){
+    var box = $("ev-log");
+    clear(box);
+    box.hidden = true;
+    if(!State.teacher || !State.cloud || !ev) return;
+    box.hidden = false;
+    box.appendChild(el("div", "perm-label", "바뀐 기록"));
+    var wait = el("p", "hint", "불러오는 중…");
+    box.appendChild(wait);
+    FB.db.collection("eventLogs").where("eventId", "==", ev.id).get().then(function(snap){
+      if(editingEvent !== ev) return;
+      box.removeChild(wait);
+      var list = snap.docs.map(function(d){ return d.data() || {}; });
+      list.sort(function(a, b){ return (a.at && b.at) ? a.at.toMillis() - b.at.toMillis() : 0; });
+      if(!list.length) box.appendChild(el("p", "hint", "기록이 없습니다. 기록 기능을 넣기(2026-11) 전에 올라온 일정입니다."));
+      list.forEach(function(x){ box.appendChild(logLine(x, true)); });
+    })["catch"](function(e){
+      wait.textContent = (e && e.code === "permission-denied")
+        ? "기록을 읽지 못했습니다. Firestore 규칙의 eventLogs 부분을 게시했는지 확인해 주세요."
+        : "기록을 읽지 못했습니다.";
+    });
+  }
+
   $("ev-form").addEventListener("submit", function(e){
     e.preventDefault();
     $("ev-err").hidden = true;
@@ -5651,20 +5779,30 @@ var FIREBASE_CONFIG = {
       };
     });
     var photos = [];
+    // 먼저 로그인된 기기인지 확인합니다(학생은 익명 로그인). 사진 파일에도 이 기기 uid 가 찍힙니다.
     var seq = chain.reduce(function(pr, fn){
       return pr.then(fn).then(function(r){ photos.push(r); });
-    }, Promise.resolve());
+    }, ensureAuth());
 
     seq.then(function(){
       btn.textContent = "저장 중…";
-      return withPatience(put("events", id, {
+      var data = {
         type:sheetType, title:title, date:getDate("f-date"),
         subject:$("f-subject").value.trim(), memo:$("f-memo").value.trim(),
         photos: photos,
-        by: State.teacher ? "선생님" : ((State.editor && State.editor.sid) || State.sid || "학생"),
         createdAt: was ? (was.createdAt || Date.now()) : Date.now(),
         updatedAt: Date.now()
-      }, "events"));
+      };
+      if(was){
+        // 고칠 때는 처음 올린 사람(by)과 기기(uid)를 그대로 둡니다. 바뀐 사람은 기록에 남습니다.
+        if(was.by) data.by = was.by;
+        if(was.uid) data.uid = was.uid;
+      } else {
+        // 스스로 적은 학번은 쓰지 않습니다(남의 학번을 넣을 수 있으니까요). 권한 받은 학생만 학번이 붙습니다.
+        data.by = "선생님";
+        if(State.cloud) data.uid = myUid();
+      }
+      return withPatience(saveEvent(id, data, !was));
     }).then(function(how){
       evShots = [];
       closeSheets(); savedToast(how, was ? "고쳤습니다" : "올렸습니다");
@@ -5677,7 +5815,9 @@ var FIREBASE_CONFIG = {
   });
   $("f-delete").addEventListener("click", function(){
     if(!editingEvent || !window.confirm("이 일정을 지울까요?")) return;
-    drop("events", editingEvent.id, "events").then(function(){ closeSheets(); toast("지웠습니다"); });
+    dropEvent(editingEvent).then(function(){ closeSheets(); toast("지웠습니다"); })["catch"](function(ex){
+      showErr("ev-err", saveErrText(ex));
+    });
   });
 
   /* 면담 신청 */
@@ -5728,9 +5868,12 @@ var FIREBASE_CONFIG = {
       .then(function(how){ closeSheets(); savedToast(how, "신청했습니다"); })
       ["catch"](function(ex){
         // 규칙 때문에 막힌 것과, 자리가 찬 것을 나눠서 알려 줍니다.
-        err.textContent = (ex && ex.code === "permission-denied")
-          ? bookErrText()
-          : "방금 다른 친구가 예약했거나 선생님이 닫은 시간대예요. 다른 시간대를 골라 주세요.";
+        var ec = (ex && ex.code) || "";
+        err.textContent = ec.indexOf("auth/") === 0
+          ? saveErrText(ex)
+          : (ec === "permission-denied"
+            ? bookErrText()
+            : "방금 다른 친구가 예약했거나 선생님이 닫은 시간대예요. 다른 시간대를 골라 주세요.");
         err.hidden = false;
         render();
       })["then"](function(){
@@ -6342,11 +6485,12 @@ var FIREBASE_CONFIG = {
   ];
   var SCOPE_MAP = {};
   SCOPES.forEach(function(s){ SCOPE_MAP[s.id] = s; });
-  function hasScope(id){ return !!(State.editor && State.editor.scopes && State.editor.scopes.indexOf(id) >= 0); }
-  function canEvents(){ return State.teacher || hasScope("events"); }
-  function canNotices(){ return State.teacher || hasScope("notices"); }
-  // 일정 올리기·고치기: 선생님, ‘일정 관리’ 권한 학생, 또는 ‘모든 학생’ 설정일 때 누구나
-  function eventsWritable(){ return canEvents() || State.perm.eventsOpen !== false; }
+  // 2026-11 부터 일정·전달사항은 선생님만 씁니다. 학생 편집 권한(코드)은 더 이상 아무 권한도 주지 않습니다.
+  function hasScope(id){ return false; }
+  function canEvents(){ return State.teacher; }
+  function canNotices(){ return State.teacher; }
+  function eventsWritable(){ return State.teacher; }
+  function canEditEvent(ev){ return !!ev && !ev.builtin && State.teacher; }
 
   var unsubEditor = null;
   function watchEditor(uid){
@@ -6378,7 +6522,7 @@ var FIREBASE_CONFIG = {
       return Promise.resolve(State.editor);
     }
     var user = FB.auth.currentUser, inv2 = null;
-    if(user && !user.isAnonymous) return Promise.reject(new Error("teacher"));
+    if(user && !isStudentAccount(user)) return Promise.reject(new Error("teacher"));
     var start = user ? Promise.resolve(user) : FB.auth.signInAnonymously().then(function(c){ return c.user; });
     return start.then(function(u){
       user = u;
@@ -6409,11 +6553,12 @@ var FIREBASE_CONFIG = {
   function releaseEditor(){
     if(!State.cloud){ State.editor = null; lsSet("a26.editor", null); render(); return Promise.resolve(); }
     var u = FB.auth.currentUser;
-    var work = (u && u.isAnonymous) ? FB.db.collection("editors").doc(u.uid)["delete"]()["catch"](function(){}) : Promise.resolve();
+    var work = isStudentAccount(u) ? FB.db.collection("editors").doc(u.uid)["delete"]()["catch"](function(){}) : Promise.resolve();
+    // 익명 로그인은 그대로 둡니다. 이 기기에서 올린 일정·예약을 계속 고치고 취소할 수 있게요.
     return work.then(function(){
       State.editor = null;
-      if(u && u.isAnonymous) return FB.auth.signOut();
-    }).then(function(){ render(); });
+      render();
+    });
   }
 
   // 선생님: 권한 주기·바꾸기·회수, 일정 올리기 범위
@@ -6458,6 +6603,18 @@ var FIREBASE_CONFIG = {
     State.editors.filter(function(e){ return e.sid === sid; }).forEach(function(e){ batch["delete"](FB.db.collection("editors").doc(e.uid)); });
     return batch.commit();
   }
+  function loadEventLogs(){
+    State.evLogs = "loading"; render();
+    FB.db.collection("eventLogs").orderBy("at", "desc").limit(50).get().then(function(snap){
+      State.evLogs = snap.docs.map(function(d){ return d.data() || {}; });
+      render();
+    })["catch"](function(e){
+      State.evLogs = (e && e.code === "permission-denied")
+        ? "기록을 읽지 못했습니다. Firestore 규칙의 eventLogs 부분을 게시했는지 확인해 주세요."
+        : "기록을 읽지 못했습니다.";
+      render();
+    });
+  }
   function setEventsOpen(open){
     if(!State.cloud){ State.perm = {eventsOpen: open}; lsSet("a26.perm", State.perm); render(); return Promise.resolve(); }
     return FB.db.collection("config").doc("perm").set({eventsOpen: open, updatedAt: Date.now()});
@@ -6467,7 +6624,8 @@ var FIREBASE_CONFIG = {
     return State.editors.filter(function(e){ return e.sid === sid; }).length;
   }
 
-  // 1인 1역 화면 아래 ‘편집 권한’ (선생님만)
+  // 1인 1역 화면 아래 ‘일정 기록’ (선생님만)
+  // 2026-11 부터 일정·전달사항은 선생님만 씁니다. 예전 편집 권한 코드가 남아 있으면 지우는 버튼만 둡니다.
   function renderPerm(){
     var box = $("perm-box");
     clear(box);
@@ -6475,11 +6633,7 @@ var FIREBASE_CONFIG = {
     var sec = el("section");
     sec.style.marginTop = "24px";
     var h = el("div", "sec-head");
-    h.appendChild(el("h2", null, "편집 권한"));
-    var gb = el("button", "link-btn", "＋ 권한 주기");
-    gb.type = "button";
-    gb.addEventListener("click", function(){ openGrant(""); });
-    h.appendChild(gb);
+    h.appendChild(el("h2", null, "일정 기록"));
     sec.appendChild(h);
 
     if(State.permErr){
@@ -6488,60 +6642,50 @@ var FIREBASE_CONFIG = {
       pe.style.margin = "0 0 10px";
       sec.appendChild(pe);
     }
+    sec.appendChild(el("p", "hint", "학급 일정과 전달사항은 선생님만 올리고 고치고 지웁니다. 학생은 보기와 면담 신청만 합니다."));
 
-    sec.appendChild(el("div", "perm-label", "학급 일정 올리기·고치기"));
-    var open = State.perm.eventsOpen !== false;
-    var seg = el("div", "seg");
-    seg.style.marginBottom = "6px";
-    [[true, "모든 학생"], [false, "권한 받은 학생만"]].forEach(function(p){
-      var b = el("button", null, p[1]);
-      b.type = "button";
-      b.setAttribute("aria-pressed", open === p[0] ? "true" : "false");
-      b.addEventListener("click", function(){
-        if(open === p[0]) return;
-        State.permErr = "";
-        setEventsOpen(p[0]).then(function(){
-          toast(p[0] ? "모든 학생이 일정을 올릴 수 있어요" : "이제 권한 받은 학생만 일정을 올릴 수 있어요");
-        })["catch"](function(e){ State.permErr = permErrText(e); render(); });
-      });
-      seg.appendChild(b);
-    });
-    sec.appendChild(seg);
-    sec.appendChild(el("p", "hint", open
-      ? "지금은 누구나 일정을 올리고 고칠 수 있고, 지우기는 선생님과 ‘일정 관리’ 권한을 받은 학생만 됩니다."
-      : "지금은 선생님과 ‘일정 관리’ 권한을 받은 학생만 일정을 올리고 고치고 지울 수 있습니다. 다른 학생은 보기만 합니다."));
-
-    var list = State.invites.slice().sort(function(a, b){ return a.sid < b.sid ? -1 : 1; });
-    var lh = el("div", "perm-label", "권한 받은 학생");
-    lh.style.marginTop = "16px";
-    sec.appendChild(lh);
-    if(!list.length){
-      sec.appendChild(emptyBox("아직 권한을 준 학생이 없어요", "‘권한 주기’로 학생을 고르면 그 학생에게 알려 줄 코드가 만들어집니다"));
+    // 최근 일정 기록: 누가(어느 기기가) 언제 무엇을 올리고 고치고 지웠는지
+    if(State.cloud){
+      var lgBox = el("div", "evlog");
+      if(State.evLogs === null){
+        var lb = el("button", "link-btn", "최근 50건 불러오기");
+        lb.type = "button";
+        lb.addEventListener("click", loadEventLogs);
+        lgBox.appendChild(lb);
+      } else if(State.evLogs === "loading"){
+        lgBox.appendChild(el("p", "hint", "불러오는 중…"));
+      } else if(typeof State.evLogs === "string"){
+        lgBox.appendChild(el("p", "form-err", State.evLogs));
+      } else {
+        if(!State.evLogs.length) lgBox.appendChild(el("p", "hint", "아직 기록이 없습니다."));
+        State.evLogs.forEach(function(x){ lgBox.appendChild(logLine(x, true)); });
+        var rb = el("button", "link-btn", "다시 불러오기");
+        rb.type = "button";
+        rb.addEventListener("click", loadEventLogs);
+        lgBox.appendChild(rb);
+      }
+      sec.appendChild(lgBox);
+      sec.appendChild(el("p", "hint", "일정을 올리고 고치고 지울 때마다 한 줄씩 남습니다. 기록은 고치거나 지울 수 없습니다. " +
+        "‘기기’는 그 휴대폰·브라우저마다 붙는 번호이고, 기록 기능을 넣기 전(2026-11)에 올라온 일정은 기록이 없습니다."));
     }
-    list.forEach(function(inv){
-      var card = el("div", "grant");
-      card.appendChild(el("div", "grant-who", seatLabel(inv.sid)));
-      var sc = el("div", "grant-scopes");
-      inv.scopes.forEach(function(id){ sc.appendChild(el("span", null, SCOPE_MAP[id] ? SCOPE_MAP[id].label : id)); });
-      card.appendChild(sc);
-      var meta = el("div", "grant-meta");
-      meta.appendChild(document.createTextNode("코드 "));
-      meta.appendChild(el("b", null, inv.code));
-      var n = devicesOf(inv.sid);
-      meta.appendChild(document.createTextNode(" · " + (n ? "기기 " + n + "대 연결" : "아직 코드를 안 넣었어요")));
-      card.appendChild(meta);
-      var tools = el("div", "tools");
-      tools.appendChild(toolBtn("권한 바꾸기", function(){ openGrant(inv.sid); }));
-      tools.appendChild(toolBtn("회수", function(){
-        if(!window.confirm(seatLabel(inv.sid) + " 학생의 편집 권한을 회수할까요?\n코드를 넣은 기기에서도 바로 권한이 사라집니다.")) return;
+
+
+    // 예전에 준 편집 권한 코드 정리 (이제 아무 권한도 없지만 코드와 학번이 남아 있으므로)
+    var sids = {};
+    State.invites.forEach(function(x){ sids[x.sid] = 1; });
+    State.editors.forEach(function(x){ sids[x.sid] = 1; });
+    var left = Object.keys(sids);
+    if(left.length){
+      var cl = el("button", "link-btn", "예전 편집 권한 코드 " + left.length + "명 것 모두 지우기");
+      cl.type = "button";
+      cl.addEventListener("click", function(){
+        if(!window.confirm("예전에 학생에게 준 편집 권한 코드를 모두 지울까요?\n이제는 코드가 있어도 아무것도 쓸 수 없습니다.")) return;
         State.permErr = "";
-        revokeGrant(inv.sid).then(function(){ toast("회수했습니다"); })["catch"](function(e){ State.permErr = permErrText(e); render(); });
-      }, true));
-      card.appendChild(tools);
-      sec.appendChild(card);
-    });
-    sec.appendChild(el("p", "hint", "학생은 자기 휴대폰에서 ‘로그인 → 편집 권한 코드 넣기’에 코드를 넣으면 됩니다. " +
-      "코드는 그 학생에게만 알려 주세요. 처음 한 번은 Firebase 콘솔에서 Authentication → 로그인 방법 → ‘익명’을 사용 설정해야 합니다."));
+        left.reduce(function(pr, sid){ return pr.then(function(){ return revokeGrant(sid); }); }, Promise.resolve())
+          .then(function(){ toast("지웠습니다"); })["catch"](function(e){ State.permErr = permErrText(e); render(); });
+      });
+      sec.appendChild(cl);
+    }
     box.appendChild(sec);
   }
 

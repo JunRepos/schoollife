@@ -3,6 +3,9 @@ rules_version = '2';
 // Firebase 콘솔 > Storage > Rules 에 그대로 붙여넣고 [게시] 하세요.
 // TEACHER_EMAIL 자리에 선생님 계정 이메일을 넣어야 합니다.
 // (Firestore 규칙과 파일이 다릅니다. 둘 다 게시해야 합니다.)
+//
+// 이 규칙은 Firestore 의 방송부 부원(bcMembers)을 직접 확인합니다. 처음 게시할 때 콘솔이 ‘Cloud Storage가 Firestore를 읽도록 권한을 줄까요?’라고
+// 물으면 [허용]을 눌러 주세요.
 
 service firebase.storage {
   match /b/{bucket}/o {
@@ -10,6 +13,19 @@ service firebase.storage {
     function isTeacher() {
       return request.auth != null
           && request.auth.token.email in ['TEACHER_EMAIL'];
+    }
+    function isBcMember() {
+      return request.auth != null
+          && firestore.exists(/databases/(default)/documents/bcMembers/$(request.auth.uid));
+    }
+    function isImage(maxMB) {
+      return request.resource.size < maxMB * 1024 * 1024
+          && request.resource.contentType.matches('image/.*');
+    }
+    // 올린 기기 uid 를 파일 정보(customMetadata.uid)에 남겨야 올라갑니다.
+    function stampedByMe() {
+      return request.resource.metadata != null
+          && request.resource.metadata.uid == request.auth.uid;
     }
 
     // 자료실 파일 — 학생은 열어 보기만, 올리고 지우는 것은 선생님만
@@ -19,31 +35,25 @@ service firebase.storage {
       allow delete: if isTeacher();
     }
 
-    // 학급 일정에 붙는 사진 — 일정과 같은 규칙으로 학생도 올릴 수 있습니다.
-    // 사진 파일만, 한 장 8MB 까지. 덮어쓰기와 삭제는 선생님만.
+    // 학급 일정 · 전달사항에 붙는 사진 — 선생님만. 사진 파일만, 한 장 8MB 까지.
     match /events/{docId}/{fileName} {
       allow read: if true;
-      allow create: if request.resource.size < 8 * 1024 * 1024
-                    && request.resource.contentType.matches('image/.*');
+      allow create: if isTeacher() && stampedByMe() && isImage(8);
       allow update, delete: if isTeacher();
     }
-
-    // 전달사항에 붙는 사진 — 로그인한 기기(선생님, 편집 권한을 받은 학생)만 올릴 수 있습니다.
-    // 사진 파일만, 한 장 8MB 까지. 덮어쓰기와 삭제는 선생님만.
     match /notices/{docId}/{fileName} {
       allow read: if true;
-      allow create: if request.auth != null
-                    && request.resource.size < 8 * 1024 * 1024
-                    && request.resource.contentType.matches('image/.*');
+      allow create: if isTeacher() && stampedByMe() && isImage(8);
       allow update, delete: if isTeacher();
     }
 
-    // 진로방송부 스튜디오 — 사진·원고·대본 파일. 로그인한 기기(선생님, 코드를 넣은 부원)만, 한 파일 30MB.
+    // 진로방송부 스튜디오 — 사진·원고·대본 파일. 선생님과 가입한 부원만 올리고, 한 파일 30MB.
+    // 방송부 사이트는 파일을 늘 새 이름으로 올리고 지우지 않으므로, 덮어쓰기와 삭제는 선생님만.
     match /bc/{docId}/{fileName} {
       allow read: if true;
-      allow create: if request.auth != null
+      allow create: if (isTeacher() || isBcMember())
                     && request.resource.size < 30 * 1024 * 1024;
-      allow update, delete: if request.auth != null;
+      allow update, delete: if isTeacher();
     }
 
     // 그 밖의 모든 경로는 차단

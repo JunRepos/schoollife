@@ -5,11 +5,11 @@ rules_version = '2';
 //
 // 요약
 //   자료실 · 1인 1역               → 누구나 읽기, 선생님만 쓰기
-//   전달사항                       → 누구나 읽기, 선생님과 ‘전달사항 쓰기’ 권한 학생이 쓰기
-//   학급 일정                      → 누구나 읽기, 쓰기는 설정에 따라(모든 학생 / 권한 받은 학생만),
-//                                    지우기는 선생님과 ‘일정 관리’ 권한 학생
-//   편집 권한(invites · editors)   → 선생님이 코드를 만들고, 학생 기기가 코드를 넣어 권한을 받음
-//   면담 예약(자리 참/빔)          → 누구나 읽기, 누구나 신청, 중복은 서버가 거부
+//   전달사항                       → 누구나 읽기, 선생님만 쓰기
+//   학급 일정                      → 누구나 읽기, 선생님만 쓰기. 쓸 때마다 기록(eventLogs)이 남음
+//   일정 기록(eventLogs)           → 선생님만 읽기, 아무도 고치거나 지우지 못함
+//   편집 권한(invites · editors)   → 쓰지 않음(2026-11 부터 학생 편집 권한 없음). 남은 것은 선생님이 지우기만
+//   면담 예약(자리 참/빔)          → 누구나 읽기, 로그인한 기기가 신청, 취소는 신청한 기기와 선생님만
 //   신청자 이름 · 면담 내용        → 선생님만 읽기
 //   학생 명단 · 누가기록           → 선생님만 읽고 쓰기 (가장 민감한 자료)
 
@@ -21,49 +21,107 @@ service cloud.firestore {
           && request.auth.token.email in ['TEACHER_EMAIL'];
     }
 
-    // 선생님이 준 코드를 넣은 학생 기기(익명 로그인)가 그 권한을 가졌는지
-    function isEditor(scope) {
-      return request.auth != null
-          && exists(/databases/$(database)/documents/editors/$(request.auth.uid))
-          && scope in get(/databases/$(database)/documents/editors/$(request.auth.uid)).data.scopes;
-    }
-    // 선생님이 ‘권한 받은 학생만’으로 바꾸기 전까지는 누구나 일정을 올립니다.
-    function eventsOpen() {
-      return !exists(/databases/$(database)/documents/config/perm)
-          || get(/databases/$(database)/documents/config/perm).data.eventsOpen != false;
-    }
 
     // ── 학생도 보는 것 ────────────────────────────────────────────
-    // 전달사항: 선생님과 ‘전달사항 쓰기’ 권한 학생. 지우기는 선생님만.
+    // 전달사항: 선생님만 쓰고 지웁니다.
     match /notices/{id} {
       allow read: if true;
-      allow create, update: if isTeacher() || isEditor('notices');
-      allow delete: if isTeacher();
+      allow write: if isTeacher();
     }
     match /resources/{id} {
       allow read: if true;
       allow write: if isTeacher();
     }
-    // ── 학급 일정: 학생도 올리고 고칠 수 있습니다 ─────────────────
-    // 선생님이 ‘권한 받은 학생만’으로 바꾸면 선생님과 ‘일정 관리’ 권한 학생만.
-    // 지우는 것은 선생님과 ‘일정 관리’ 권한 학생만. 시험 일정이 말없이 사라지는 일을 막기 위해서입니다.
+    // ── 학급 일정: 선생님만 올리고 고치고 지웁니다 ────────────────
+    // 쓸 때마다 eventLogs 에 기록이 한 장씩 같이 들어가야 하고(같은 배치), 기록은 고치거나 지울 수 없습니다.
+    // 새로 올리는 일정의 ‘올린 사람(by)’은 ‘선생님’. 예전에 학생이 올린 일정은 고쳐도 by 가 그대로 남습니다.
+    function evFieldsOk() {
+      let d = request.resource.data;
+      return d.keys().hasAll(['type', 'title', 'date', 'logId'])
+          && d.keys().hasOnly(['type','title','date','subject','memo','by','photos','uid','logId','createdAt','updatedAt'])
+          && (!('photos' in d) || (d.photos is list && d.photos.size() <= 5))
+          && d.type in ['perf', 'exam', 'school', 'etc']
+          && d.title is string
+          && d.title.size() > 0
+          && d.title.size() <= 60
+          && d.date is string
+          && d.date.size() == 10
+          && (!('memo' in d) || (d.memo is string && d.memo.size() <= 500))
+          && (!('subject' in d) || (d.subject is string && d.subject.size() <= 30))
+          && (!('by' in d) || (d.by is string && d.by.size() <= 20));
+    }
+    // 이 쓰기와 같은 배치에 새 기록(eventLogs/{logId})이 들어가는지
+    function evLogged(id, action) {
+      let logId = request.resource.data.logId;
+      let logPath = /databases/$(database)/documents/eventLogs/$(logId);
+      return logId is string
+          && logId.size() > 0 && logId.size() <= 40
+          && !exists(logPath)
+          && existsAfter(logPath)
+          && getAfter(logPath).data.eventId == id
+          && getAfter(logPath).data.action == action;
+    }
     match /events/{id} {
       allow read: if true;
-      allow create, update:
-        if (isTeacher() || isEditor('events') || eventsOpen())
-        && request.resource.data.keys().hasAll(['type', 'title', 'date'])
-        && request.resource.data.keys().hasOnly(['type','title','date','subject','memo','by','photos','createdAt','updatedAt'])
-        && (!('photos' in request.resource.data) || request.resource.data.photos.size() <= 5)
-        && request.resource.data.type in ['perf', 'exam', 'school', 'etc']
-        && request.resource.data.title is string
-        && request.resource.data.title.size() > 0
-        && request.resource.data.title.size() <= 60
-        && request.resource.data.date is string
-        && request.resource.data.date.size() == 10
-        && (!('memo' in request.resource.data) || request.resource.data.memo.size() <= 500)
-        && (!('subject' in request.resource.data) || request.resource.data.subject.size() <= 30)
-        && (!('by' in request.resource.data) || request.resource.data.by.size() <= 20);
-      allow delete: if isTeacher() || isEditor('events');
+      allow create: if isTeacher()
+        && evFieldsOk()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.get('by', '') == '선생님'
+        && evLogged(id, 'create');
+      allow update: if isTeacher()
+        && evFieldsOk()
+        && request.resource.data.get('uid', '') == resource.data.get('uid', '')
+        && request.resource.data.get('by', '') == resource.data.get('by', '')
+        && evLogged(id, 'update');
+      // 지울 때는 기록 id 가 ‘일정id_del’ 로 정해져 있습니다.
+      allow delete: if isTeacher()
+        && !exists(/databases/$(database)/documents/eventLogs/$(id + '_del'))
+        && existsAfter(/databases/$(database)/documents/eventLogs/$(id + '_del'));
+    }
+
+    // ── 일정 바뀐 기록: 선생님만 쓰고 읽고, 아무도 고치거나 지우지 못합니다 ──
+    // 언제(서버 시각) · 어느 기기(uid)가 · 무엇을 썼는지.
+    function logFieldsOk() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['eventId','action','uid','by','sidHint','client','type','title','date','subject','memo','photos','ua','at'])
+          && d.keys().hasAll(['eventId','action','uid','title','date','at'])
+          && d.uid == request.auth.uid
+          && d.at == request.time
+          && d.action in ['create', 'update', 'delete']
+          && d.eventId is string && d.eventId.size() > 0 && d.eventId.size() <= 40
+          && d.title is string && d.title.size() <= 60
+          && d.date is string && d.date.size() <= 10
+          && d.get('by', '') is string && d.get('by', '').size() <= 20
+          && d.get('sidHint', '') is string && d.get('sidHint', '').size() <= 10
+          && d.get('client', '') is string && d.get('client', '').size() <= 40
+          && d.get('memo', '') is string && d.get('memo', '').size() <= 500
+          && d.get('subject', '') is string && d.get('subject', '').size() <= 30
+          && d.get('ua', '') is string && d.get('ua', '').size() <= 300
+          && d.get('photos', 0) is int;
+    }
+    // 기록 내용이 실제로 쓰인 일정과 같아야 합니다(올리기·고치기는 쓴 뒤, 지우기는 지우기 전 내용).
+    function logMatches(ev, logId, needLink) {
+      let d = request.resource.data;
+      return (!needLink || ev.get('logId', '') == logId)
+          && ev.title == d.title
+          && ev.date == d.date
+          && ev.type == d.get('type', '')
+          && ev.get('memo', '') == d.get('memo', '')
+          && ev.get('subject', '') == d.get('subject', '')
+          && ev.get('by', '') == d.get('by', '');
+    }
+    match /eventLogs/{logId} {
+      allow read: if isTeacher();
+      allow create: if isTeacher()
+        && logFieldsOk()
+        && (request.resource.data.action == 'delete'
+              ? (logId == request.resource.data.eventId + '_del'
+                 && exists(/databases/$(database)/documents/events/$(request.resource.data.eventId))
+                 && !existsAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId))
+                 && logMatches(get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data, logId, false))
+              : (existsAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId))
+                 && logMatches(getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data, logId, true)));
+      allow update, delete: if false;
     }
 
     // ── 편집 권한 ─────────────────────────────────────────────────
@@ -77,17 +135,11 @@ service cloud.firestore {
       allow get: if true;
       allow list, write: if isTeacher();
     }
-    // editors/{기기 uid}: 코드를 넣은 학생 기기. 코드와 권한이 선생님이 만든 것과 똑같아야 만들어집니다.
+    // editors/{기기 uid}: 예전에 코드를 넣은 학생 기기. 이제 아무 권한도 주지 않고, 새로 만들 수도 없습니다.
+    // 남아 있는 것은 선생님 화면에서 한 번에 지울 수 있습니다.
     match /editors/{uid} {
       allow read: if isTeacher() || (request.auth != null && request.auth.uid == uid);
-      allow create: if request.auth != null && request.auth.uid == uid
-                    && request.resource.data.keys().hasOnly(['code', 'sid', 'scopes', 'createdAt'])
-                    && request.resource.data.code is string
-                    && request.resource.data.code.size() == 6
-                    && exists(/databases/$(database)/documents/invites/$(request.resource.data.code))
-                    && get(/databases/$(database)/documents/invites/$(request.resource.data.code)).data.sid == request.resource.data.sid
-                    && get(/databases/$(database)/documents/invites/$(request.resource.data.code)).data.scopes == request.resource.data.scopes;
-      allow update: if isTeacher();
+      allow create, update: if false;
       allow delete: if isTeacher() || (request.auth != null && request.auth.uid == uid);
     }
 
@@ -101,14 +153,26 @@ service cloud.firestore {
     // ── 면담 예약: 자리가 찼는지 여부만 공개 ──────────────────────
     // create 는 문서가 없을 때만 성공하므로 중복 예약이 서버에서 막힙니다.
     // 선생님이 닫은 시간대(closures/{날짜_시간대})에는 예약이 만들어지지 않습니다.
+    // 신청한 기기(uid)가 같이 저장되고, 취소는 그 기기와 선생님만 할 수 있습니다.
+    // (uid 가 없는 예전 예약은 선생님만 취소합니다.)
     match /bookings/{id} {
       allow read: if true;
-      allow create: if request.resource.data.keys().hasOnly(['date', 'slot', 'client', 'createdAt'])
+      allow create: if request.auth != null
+                    && request.resource.data.keys().hasOnly(['date', 'slot', 'client', 'uid', 'createdAt'])
                     && request.resource.data.date is string
+                    && request.resource.data.date.size() == 10
                     && request.resource.data.slot in ['am', 'lunch', 'pm', 'pm2']
+                    && id == request.resource.data.date + '_' + request.resource.data.slot
+                    && request.resource.data.uid is string
+                    && (request.resource.data.uid == request.auth.uid || isTeacher())   // 선생님은 옮길 때 원래 신청 기기로 남김
                     && !exists(/databases/$(database)/documents/closures/$(id));
-      allow delete: if true;          // 학생 본인 취소용 (README 주의사항 참고)
+      allow delete: if isTeacher()
+                    || (request.auth != null && resource.data.get('uid', '') == request.auth.uid);
       allow update: if isTeacher();
+    }
+    function bookingOwnedByMe(id) {
+      return exists(/databases/$(database)/documents/bookings/$(id))
+          && get(/databases/$(database)/documents/bookings/$(id)).data.get('uid', '') == request.auth.uid;
     }
 
     // ── 면담 시간대 닫기: 누구나 읽기(‘닫힘’ 표시), 선생님만 닫고 열기 ──
@@ -120,11 +184,24 @@ service cloud.firestore {
     // ── 신청자 이름 · 면담 내용: 선생님만 읽습니다 ────────────────
     match /bookingDetails/{id} {
       allow read: if isTeacher();
-      allow create: if request.resource.data.keys().hasOnly(['name', 'klass', 'reason', 'client', 'createdAt'])
+      // 그 자리를 잡은 기기(또는 선생님)만 사유를 적습니다.
+      allow create: if request.auth != null
+                    && request.resource.data.keys().hasOnly(['name', 'klass', 'reason', 'client', 'uid', 'createdAt'])
                     && request.resource.data.name is string
                     && request.resource.data.name.size() <= 20
-                    && request.resource.data.reason.size() <= 500;
-      allow delete: if true;
+                    && request.resource.data.klass is string
+                    && request.resource.data.klass.size() <= 10
+                    && request.resource.data.reason is string
+                    && request.resource.data.reason.size() <= 500
+                    && exists(/databases/$(database)/documents/bookings/$(id))
+                    && request.resource.data.uid == get(/databases/$(database)/documents/bookings/$(id)).data.get('uid', '')
+                    && (isTeacher() || bookingOwnedByMe(id));
+      // 지우기: 선생님, 신청한 기기, 또는 예약이 이미 없어진 찌꺼기를 지금 그 자리를 잡은 기기가 치울 때
+      allow delete: if isTeacher()
+                    || (request.auth != null
+                        && (resource.data.get('uid', '') == request.auth.uid
+                            || !exists(/databases/$(database)/documents/bookings/$(id))
+                            || bookingOwnedByMe(id)));
       allow update: if isTeacher();
     }
 
