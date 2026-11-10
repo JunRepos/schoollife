@@ -1299,7 +1299,8 @@
       <textarea id="u-past" rows="3"></textarea>
       <div class="srcnote" style="margin-top:6px">
         예) <code>2026 2.31 96.4</code> — 어디가나 대학 홈페이지의 최종 등록자 70%컷을 옮겨 적으세요.
-        환산점수는 몰라도 됩니다. 2026·2025·2024학년도는 9등급제라 지금 5등급 성적과 곧바로 견줄 수 없습니다.
+        환산점수는 몰라도 됩니다. 2027학년도까지는 9등급제라, 화면에서는 이 학생 성적을 9등급 범위로 옮겨서 견줍니다.
+        2028학년도부터 적은 컷은 5등급 그대로 견줍니다.
       </div>
     </div>
     <div class="field">
@@ -1702,6 +1703,9 @@ var APP_CHECK_SITE_KEY = "";
     closures:{}, todos:[]
   };
 
+  // 실제 Firebase 설정이 들어 있으면 데모 모드는 쓰지 않습니다(연결이 끊겨도 데모로 넘어가지 않음).
+  var CLOUD_ON = !!(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId);
+
   /* ---------------- 데모(로컬) ---------------- */
   var Local = {
     load:function(){
@@ -1725,6 +1729,8 @@ var APP_CHECK_SITE_KEY = "";
       State.teacher = !!lsGet("a26.teacherMode");
     },
     save:function(){
+      // 실제 서버를 쓰는 사이트에서는 기기에 아무것도 남기지 않습니다(연결이 끊겨도 마찬가지).
+      if(CLOUD_ON) return;
       lsSet("a26.notices", State.notices);
       lsSet("a26.events", State.events);
       lsSet("a26.bookings", State.bookings);
@@ -2050,7 +2056,14 @@ var APP_CHECK_SITE_KEY = "";
     });
   }
 
+  // 서버에 연결하지 못한 채 열린 경우: 기기에만 저장된 척하지 않고 실패로 알립니다.
+  function offlineErr(){
+    var e = new Error("offline");
+    e.code = "unavailable";
+    return Promise.reject(e);
+  }
   function put(coll, id, data, localArr){
+    if(State.offline) return offlineErr();
     if(State.cloud) return FB.db.collection(coll).doc(id).set(data);
     var arr = State[localArr];
     var i = arr.map(function(x){ return x.id; }).indexOf(id);
@@ -2061,6 +2074,7 @@ var APP_CHECK_SITE_KEY = "";
     return Promise.resolve();
   }
   function drop(coll, id, localArr){
+    if(State.offline) return offlineErr();
     if(State.cloud) return FB.db.collection(coll).doc(id)["delete"]();
     State[localArr] = State[localArr].filter(function(x){ return x.id !== id; });
     Local.save(); render();
@@ -2102,6 +2116,7 @@ var APP_CHECK_SITE_KEY = "";
   function createBooking(date, slot, sid, reason, client, ownerUid){
     var id = bookingId(date, slot);
     var owner = client || CLIENT;
+    if(State.offline) return offlineErr();
     if(State.cloud){
       var ouid = "";
       // 자리 잡기는 create 라서 이미 찬 자리면 서버가 거부합니다.
@@ -2128,6 +2143,7 @@ var APP_CHECK_SITE_KEY = "";
   }
 
   function cancelBooking(id){
+    if(State.offline) return offlineErr();
     if(State.cloud){
       return FB.db.collection("bookings").doc(id)["delete"]().then(function(){
         return FB.db.collection("bookingDetails").doc(id)["delete"]()["catch"](function(){});
@@ -2273,7 +2289,8 @@ var APP_CHECK_SITE_KEY = "";
     if(!n.hidden && Date.now() - (n.createdAt || 0) < 3 * 86400000) meta.appendChild(el("span", "flag new", "새 글"));
     if(n.hidden) meta.appendChild(el("span", "flag grey", "내림"));
     meta.appendChild(el("span", null, mdText(noticeDate(n))));
-    if(n.by && n.by !== "선생님") meta.appendChild(el("span", null, (/^\d{5}$/.test(n.by) ? noLabel(n.by) : n.by) + " 올림"));
+    // 예전에 학생이 올린 글의 학번은 선생님 화면에만 보입니다(학생 화면에 남의 학번을 드러내지 않음).
+    if(State.teacher && n.by && n.by !== "선생님") meta.appendChild(el("span", null, (/^\d{5}$/.test(n.by) ? noLabel(n.by) : n.by) + " 올림"));
     card.appendChild(meta);
 
     if(n.body && opts.q && opts.q.length && !noticeOpen[n.id]){
@@ -2488,7 +2505,8 @@ var APP_CHECK_SITE_KEY = "";
     if(ev.builtin) meta.appendChild(el("span", "tag sch", "학사일정"));
     if(ev.subject) meta.appendChild(el("span", null, ev.subject));
     if(!opts.hideDate) meta.appendChild(el("span", null, mdText(ev.date) + (ev.end ? " ~ " + mdText(ev.end) : "")));
-    if(ev.by) meta.appendChild(el("span", null, ev.by + " 올림"));
+    // 예전에 학생이 올린 일정의 학번은 선생님 화면에만 보입니다. 이 값은 그 기기에서 직접 적은 것이라 증거가 아닙니다.
+    if(State.teacher && ev.by && ev.by !== "선생님") meta.appendChild(el("span", null, ev.by + " 적음(본인 입력)"));
     body.appendChild(meta);
     if(ev.memo) body.appendChild(el("div", "ev-memo", ev.memo));
     if(ev.photos && ev.photos.length){
@@ -3610,7 +3628,7 @@ var APP_CHECK_SITE_KEY = "";
     }
     var ranked = rows.filter(function(r){ return r.rank; });
     var avg5 = wAvgRank(rows);
-    var g9 = to9(avg5);
+    var g9r = range9(avg5);
 
     var tiles = el("div", "tiles");
     tiles.appendChild(tile("전체 평균", fmt(avg5), "학점 가중 · 5등급제", true));
@@ -3621,7 +3639,8 @@ var APP_CHECK_SITE_KEY = "";
       t.querySelector(".v").style.color = gp.color;
       tiles.appendChild(t);
     });
-    tiles.appendChild(tile("9등급 환산", fmt(g9), avg5 == null ? "등급 과목 없음" : "추정 상위 " + fmt(pctFrom5(avg5), 1) + "%"));
+    tiles.appendChild(tile("9등급 환산(추정)", g9r ? "약 " + fmt(g9r.mid) : "—",
+      g9r ? range9Text(g9r) + " 사이 · 상위 약 " + fmt(pctFrom5(avg5), 0) + "%" : "등급 과목 없음"));
     tiles.appendChild(tile("이수 학점", String(sumCredit(rows)), "등급 과목 " + sumCredit(ranked) + "학점"));
     box.appendChild(tiles);
 
@@ -3864,8 +3883,19 @@ var APP_CHECK_SITE_KEY = "";
       if(u.past && u.past.length){
         kvRow("지난 입결", u.past.slice().sort(function(a,b){ return (b.year||0)-(a.year||0); }).map(function(pp){
           var tx = pp.year + "학년도 " + (pp.cut70 != null ? "70%컷 " + pp.cut70 + "등급" : "");
-          if(res.avgRank != null && pp.cut70 != null)
+          if(res.avgRank == null || pp.cut70 == null) return tx;
+          if(pp.year >= 2028){
+            // 2028학년도부터는 같은 5등급제라 그대로 견줍니다.
             tx += res.avgRank <= pp.cut70 ? " — 앞섭니다" : " — " + (res.avgRank - pp.cut70).toFixed(2) + "등급 뒤집니다";
+            return tx;
+          }
+          // 2027학년도까지는 9등급제 — 이 학생 성적을 9등급 범위로 옮겨서 견줍니다.
+          var r9 = range9(res.avgRank);
+          var how9 = vsCut9(r9, pp.cut70);
+          tx += " (9등급제) — 이 학생은 9등급으로 약 " + range9Text(r9) + "등급이라 "
+              + (how9 === "ahead" ? "앞설 가능성이 큽니다"
+                 : how9 === "behind" ? "뒤질 가능성이 큽니다"
+                 : "앞뒤를 가늠하기 어렵습니다");
           return tx;
         }).join(String.fromCharCode(10)));
       }
@@ -3881,8 +3911,8 @@ var APP_CHECK_SITE_KEY = "";
         ipb.appendChild(el("div", "iphead", "지난 입시 결과 · 대입정보포털 어디가"));
         ipb.appendChild(el("div", "ipwarn",
           "2024·2025학년도는 9등급제였습니다. 우리 반은 5등급제라 숫자를 곧바로 견줄 수 없어, 아래 비교는 9등급으로 옮긴 추정치로만 보여 드립니다. "
-          + "환산점수도 그 해의 산출식 기준이라 위의 2028 점수와 비교하면 안 됩니다. 2026학년도 결과는 어디가에 아직 표로 올라와 있지 않습니다."));
-        var est9 = res.avgRank != null ? to9(res.avgRank) : null;
+          + "환산점수도 그 해의 산출식 기준이라 위의 2028 점수와 비교하면 안 됩니다. 2026학년도 결과는 아직 이 표에 넣지 않았으니 어디가에서 직접 확인해 주세요."));
+        var est9 = res.avgRank != null ? range9(res.avgRank) : null;
         ipg.slice().sort(function(a, b){ return b.year - a.year; }).forEach(function(gp){
           var key = u.id + "|" + gp.year + "|" + gp.track;
           var rowsG = gp.rows || [];
@@ -3900,10 +3930,13 @@ var APP_CHECK_SITE_KEY = "";
           }
           box2.appendChild(el("div", "s", parts.join(" · ")));
           if(est9 != null && g70.length){
-            var within = g70.filter(function(v){ return est9 <= v; }).length;
+            var ahead = g70.filter(function(v){ return vsCut9(est9, v) === "ahead"; }).length;
+            var unsure = g70.filter(function(v){ return vsCut9(est9, v) === "unsure"; }).length;
             box2.appendChild(el("div", "c",
-              "참고: 이 학생의 반영 평균 " + res.avgRank.toFixed(2) + "등급(5등급제)을 9등급으로 옮기면 약 " + est9.toFixed(2)
-              + "등급입니다. 이 값이 70%컷보다 좋은 모집단위는 " + g70.length + "곳 중 " + within + "곳입니다. 추정치이니 참고로만 보세요."));
+              "참고: 이 학생의 반영 평균 " + res.avgRank.toFixed(2) + "등급(5등급제)은 9등급으로 옮기면 "
+              + range9Text(est9) + "등급 사이(가운데 약 " + est9.mid.toFixed(2) + ")입니다. "
+              + g70.length + "개 모집단위 중 70%컷보다 좋을 가능성이 큰 곳 " + ahead + "곳, 가늠하기 어려운 곳 " + unsure + "곳입니다. "
+              + "한 값이 아니라 범위로 보는 추정치이니 참고로만 보세요."));
           }
           var tl = el("div", "tools");
           var open = !!State.ipOpen[key];
@@ -4195,11 +4228,33 @@ var APP_CHECK_SITE_KEY = "";
     }
     return ys[ys.length-1];
   }
-  // 5등급 평균 → 추정 누적 상위 % → 9등급 환산. 공식 표가 없어 추정치입니다.
+  // 5등급 평균 → 추정 누적 상위 %. 공식 표가 없어 추정치입니다.
   function pctFrom5(avg5){ return interp(avg5, [1,2,3,4,5], G5_MID); }
+  /* 5등급 → 9등급은 한 값으로 정해지지 않습니다.
+     5등급 1등급(상위 0~10%)은 9등급으로 1등급(0~4%)일 수도 2등급(4~11%)일 수도 있습니다.
+     그래서 과목마다 가능한 9등급의 가장 좋은 값·나쁜 값·기댓값을 두고, 평균 등급 사이는 직선으로 잇습니다.
+       5등급:      1     2     3     4     5
+       가장 좋게:  1     2     4     6     8
+       기댓값:     1.60  3.42  5.00  6.58  8.40   (구간이 겹치는 비율로 가중)
+       가장 나쁘게: 2     4     6     8     9                                        */
+  var G9_BEST = [1, 2, 4, 6, 8];
+  var G9_EXP  = [1.6, 3.417, 5, 6.583, 8.4];
+  var G9_WORST = [2, 4, 6, 8, 9];
+  function range9(avg5){
+    if(avg5 == null || !isFinite(avg5)) return null;
+    var xs = [1,2,3,4,5];
+    return {lo: interp(avg5, xs, G9_BEST), mid: interp(avg5, xs, G9_EXP), hi: interp(avg5, xs, G9_WORST)};
+  }
   function to9(avg5){
-    if(avg5 == null) return null;
-    return interp(pctFrom5(avg5), G9_MID, [1,2,3,4,5,6,7,8,9]);
+    var r = range9(avg5);
+    return r ? r.mid : null;
+  }
+  function range9Text(r){ return fmt(r.lo) + "~" + fmt(r.hi); }
+  // 9등급 컷과 견주기: 범위 전체가 컷보다 좋을 때만 ‘앞섭니다’, 전체가 나쁠 때만 ‘뒤집니다’.
+  function vsCut9(r, cut){
+    if(r.hi <= cut) return "ahead";
+    if(r.lo > cut) return "behind";
+    return "unsure";
   }
 
   function sidOfNo(no){ return "206" + (no < 10 ? "0" + no : "" + no); }
@@ -5101,6 +5156,13 @@ var APP_CHECK_SITE_KEY = "";
   $("lg-teacher").addEventListener("submit", function(e){
     e.preventDefault();
     if(!State.cloud){
+      // 실제 서버를 쓰는 사이트에서 연결이 안 됐을 때 비밀번호 없이 선생님 화면을 열면 안 됩니다.
+      if(CLOUD_ON){
+        var oe = $("lg-err");
+        oe.textContent = "서버에 연결되지 않아 로그인할 수 없습니다. 인터넷 연결을 확인하고 새로 고침해 주세요.";
+        oe.hidden = false;
+        return;
+      }
       State.teacher = true;
       lsSet("a26.teacherMode", true);
       closeSheets(); toast("데모 선생님 화면입니다");
@@ -5869,7 +5931,7 @@ var APP_CHECK_SITE_KEY = "";
       ["catch"](function(ex){
         // 규칙 때문에 막힌 것과, 자리가 찬 것을 나눠서 알려 줍니다.
         var ec = (ex && ex.code) || "";
-        err.textContent = ec.indexOf("auth/") === 0
+        err.textContent = (ec.indexOf("auth/") === 0 || ec === "unavailable")
           ? saveErrText(ex)
           : (ec === "permission-denied"
             ? bookErrText()
@@ -5981,6 +6043,15 @@ var APP_CHECK_SITE_KEY = "";
 
   /* 성적 불러오기 */
   var importReady = null;
+  // 학기 단위로 합칩니다. 새 파일에 들어 있는 학기(학년-학기)만 바꾸고, 파일에 없는 학기 성적은 그대로 둡니다.
+  // (예전에는 학생 성적을 통째로 바꿔서, 한 학기 파일만 넣으면 지난 학기 성적이 사라졌습니다.)
+  function termKey(r){ return r.g + "-" + r.t; }
+  function mergeGradeRows(oldRows, newRows){
+    var fresh = {};
+    newRows.forEach(function(r){ fresh[termKey(r)] = 1; });
+    var kept = (oldRows || []).filter(function(r){ return !fresh[termKey(r)]; });
+    return kept.concat(newRows).sort(function(a, b){ return ((a.g || 0) - (b.g || 0)) || ((a.t || 0) - (b.t || 0)); });
+  }
   function openImport(){
     importReady = null;
     $("im-preview").hidden = true;
@@ -6027,9 +6098,16 @@ var APP_CHECK_SITE_KEY = "";
       var subjects = pack.reduce(function(a, p){ return a + p.rows.length; }, 0);
       var terms = {};
       parsed.forEach(function(r){ terms[r.g + "-" + r.t] = 1; });
+      // 이미 저장된 학기 중 이 파일로 바뀌는 것 / 그대로 남는 것
+      var oldTerms = {};
+      pack.forEach(function(p){ gradeRows(p.sid).forEach(function(r){ oldTerms[termKey(r)] = 1; }); });
+      var replaced = Object.keys(terms).filter(function(k){ return oldTerms[k]; }).sort();
+      var keptT = Object.keys(oldTerms).filter(function(k){ return !terms[k]; }).sort();
       [["학생", pack.length + "명"],
        ["과목 기록", subjects + "건"],
-       ["학기", Object.keys(terms).sort().join(", ")]].forEach(function(p){
+       ["이 파일의 학기", Object.keys(terms).sort().join(", ")],
+       ["새 성적으로 바뀌는 학기", replaced.length ? replaced.join(", ") : "없음"],
+       ["그대로 남는 학기", keptT.length ? keptT.join(", ") : "없음"]].forEach(function(p){
         var l = el("div", "prev-line");
         l.appendChild(el("span", null, p[0]));
         l.appendChild(el("b", null, p[1]));
@@ -6067,13 +6145,13 @@ var APP_CHECK_SITE_KEY = "";
       var batch = FB.db.batch();
       importReady.forEach(function(p){
         batch.set(FB.db.collection("grades").doc(p.sid), {
-          name: p.name, rows: p.rows, updatedAt: Date.now()
+          name: p.name, rows: mergeGradeRows(gradeRows(p.sid), p.rows), updatedAt: Date.now()
         });
       });
       work = batch.commit();
     } else {
       importReady.forEach(function(p){
-        State.grades[p.sid] = {name:p.name, rows:p.rows, updatedAt:Date.now()};
+        State.grades[p.sid] = {name:p.name, rows:mergeGradeRows(gradeRows(p.sid), p.rows), updatedAt:Date.now()};
       });
       lsSet("a26.grades", State.grades);
       work = Promise.resolve();
@@ -7725,7 +7803,34 @@ var APP_CHECK_SITE_KEY = "";
     if(before !== document.body.classList.contains("wide")) render();
   });
 
+  /* 긴 글(생기부 ‘적어 줄 내용’ 같은 textarea)을 적는 중에는 다시 그리지 않습니다.
+     다시 그리면 입력칸이 새로 만들어져 한글 조합 중인 글자가 깨지고, 아직 저장 안 된 글자가 사라집니다.
+     그동안 들어온 변경은 커서가 빠져나간 뒤 한 번에 그립니다.
+     (한 줄 입력칸은 Enter 로 바로 추가하고 다시 그려야 해서 막지 않습니다.) */
+  var renderHeld = false;
+  function editingInView(){
+    var a = document.activeElement;
+    return !!a && a.tagName === "TEXTAREA" && !!a.closest && !!a.closest('[id^="view-"]');
+  }
+  function flushHeldRender(){
+    if(!renderHeld) return;
+    var done = false;
+    function go(){
+      if(done) return;
+      done = true;
+      if(renderHeld && !editingInView()) render();
+    }
+    // 다른 곳을 눌러 커서가 빠졌으면 그 클릭이 먼저 처리되도록 기다립니다(그사이 화면이 바뀌면 클릭이 사라짐).
+    document.addEventListener("click", function(){ setTimeout(go, 0); }, {once:true});
+    setTimeout(go, 700);
+  }
+  document.addEventListener("focusout", function(e){
+    if(e.target && e.target.tagName === "TEXTAREA") flushHeldRender();
+  });
+
   function render(){
+    if(editingInView()){ renderHeld = true; return; }
+    renderHeld = false;
     renderRole();
     renderTabs();
     renderFab();
@@ -7741,20 +7846,35 @@ var APP_CHECK_SITE_KEY = "";
   }
 
   /* ---------------- 시작 ---------------- */
-  Local.load();
+  // 실제 서버를 쓰는 사이트에서는 기기에 남은 예전 데모 자료(명단·성적·생기부·기록 등)를 읽지 않고 지웁니다.
+  // 학교 공용 PC에 남아 있으면 다음 사람이 볼 수 있기 때문입니다. 학번·시간표 같은 보기 설정은 그대로 둡니다.
+  function purgeLocalData(){
+    var drop = ["a26.notices", "a26.events", "a26.bookings", "a26.details", "a26.resources", "a26.roster",
+                "a26.grades", "a26.unis", "a26.roles", "a26.mocks", "a26.perm", "a26.invites", "a26.editor",
+                "a26.closures", "a26.todos", "a26.sb", "a26.teacherMode"];
+    try{
+      for(var i = localStorage.length - 1; i >= 0; i--){
+        var k = localStorage.key(i);
+        if(k && (drop.indexOf(k) >= 0 || k.indexOf("a26.entries.") === 0)) localStorage.removeItem(k);
+      }
+    }catch(e){}
+  }
+  if(CLOUD_ON) purgeLocalData(); else Local.load();
   applyWide();
   switchTab("home");
 
-  if(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId){
+  if(CLOUD_ON){
     State.notices = []; State.events = []; State.bookings = []; State.resources = []; State.roster = {}; State.roles = null;
     State.editor = null; State.invites = []; State.perm = {eventsOpen:true}; State.closures = {};
     State.teacher = false;
     applyWide(); render();
     initCloud()["catch"](function(e){
       console.error(e);
+      // 데모로 넘어가지 않습니다. 보기만 되고(시간표·기본 일정), 저장은 모두 실패로 알립니다.
       State.cloud = false;
-      Local.load();
-      toast("서버에 연결하지 못해 데모 모드로 엽니다");
+      State.offline = true;
+      State.teacher = false;
+      toast("서버에 연결하지 못했습니다. 인터넷 연결을 확인하고 새로 고침해 주세요.");
       applyWide(); render();
     });
   }

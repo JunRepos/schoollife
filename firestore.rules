@@ -130,10 +130,9 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isTeacher();
     }
-    // invites/{코드}: 선생님이 만든 권한 코드. 코드를 아는 사람만 그 한 장을 읽을 수 있고, 목록은 선생님만.
+    // invites/{코드}: 예전 편집 권한 코드. 이제 쓰지 않으니 선생님만 보고 지웁니다.
     match /invites/{code} {
-      allow get: if true;
-      allow list, write: if isTeacher();
+      allow read, write: if isTeacher();
     }
     // editors/{기기 uid}: 예전에 코드를 넣은 학생 기기. 이제 아무 권한도 주지 않고, 새로 만들 수도 없습니다.
     // 남아 있는 것은 선생님 화면에서 한 번에 지울 수 있습니다.
@@ -155,12 +154,22 @@ service cloud.firestore {
     // 선생님이 닫은 시간대(closures/{날짜_시간대})에는 예약이 만들어지지 않습니다.
     // 신청한 기기(uid)가 같이 저장되고, 취소는 그 기기와 선생님만 할 수 있습니다.
     // (uid 가 없는 예전 예약은 선생님만 취소합니다.)
+    // 학생은 오늘부터 3주 안의 날짜만 잡습니다(1년 치를 한꺼번에 채우는 장난 막기). 선생님은 날짜 제한 없음.
+    function bookingDateOk(d) {
+      let day = timestamp.date(int(d[0:4]), int(d[5:7]), int(d[8:10]));
+      return day > request.time - duration.value(1, 'd')
+          && day < request.time + duration.value(22, 'd');
+    }
     match /bookings/{id} {
       allow read: if true;
       allow create: if request.auth != null
                     && request.resource.data.keys().hasOnly(['date', 'slot', 'client', 'uid', 'createdAt'])
                     && request.resource.data.date is string
-                    && request.resource.data.date.size() == 10
+                    && request.resource.data.date.matches('^20[0-9]{2}-[01][0-9]-[0-3][0-9]$')
+                    && request.resource.data.client is string
+                    && request.resource.data.client.size() <= 24
+                    && request.resource.data.createdAt is int
+                    && (isTeacher() || bookingDateOk(request.resource.data.date))
                     && request.resource.data.slot in ['am', 'lunch', 'pm', 'pm2']
                     && id == request.resource.data.date + '_' + request.resource.data.slot
                     && request.resource.data.uid is string
