@@ -3069,7 +3069,7 @@ var APP_CHECK_SITE_KEY = "";
     var nb = $("home-notices");
     clear(nb);
     var ns = visibleNotices().slice(0, 2);
-    if(!ns.length) nb.appendChild(emptyBox("아직 전달사항이 없어요", State.teacher ? "위 ‘전달사항 쓰기’로 올려 보세요" : ""));
+    if(!ns.length) nb.appendChild(emptyBox(State.offline ? "전달사항을 불러오지 못했어요" : "아직 전달사항이 없어요", State.teacher ? "위 ‘전달사항 쓰기’로 올려 보세요" : ""));
     else {
       var list = el("div", "notices");
       ns.forEach(function(n){ list.appendChild(noticeCard(n, {clamp: true})); });
@@ -3164,7 +3164,7 @@ var APP_CHECK_SITE_KEY = "";
       clear(box);
       var ns = visibleNotices();
       if(!ns.length){
-        box.appendChild(emptyBox("아직 전달사항이 없어요", State.teacher ? "아래 ‘전달사항 쓰기’로 올려 보세요" : "새 공지가 올라오면 여기에 표시됩니다"));
+        box.appendChild(emptyBox(State.offline ? "전달사항을 불러오지 못했어요" : "아직 전달사항이 없어요", State.teacher ? "아래 ‘전달사항 쓰기’로 올려 보세요" : "새 공지가 올라오면 여기에 표시됩니다"));
         return;
       }
       // 찾는 중에는 날짜 묶음 없이 찾은 것만 쭉 보여 줍니다.
