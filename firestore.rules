@@ -10,6 +10,7 @@ rules_version = '2';
 //   일정 기록(eventLogs)           → 선생님만 읽기, 아무도 고치거나 지우지 못함
 //   편집 권한(invites · editors)   → 쓰지 않음(2026-11 부터 학생 편집 권한 없음). 남은 것은 선생님이 지우기만
 //   면담 예약(자리 참/빔)          → 누구나 읽기, 로그인한 기기가 신청, 취소는 신청한 기기와 선생님만
+//   면담 신청 장부(bookers)        → 한 기기가 잡아 둘 수 있는 면담은 3건까지 (도배 막기)
 //   신청자 이름 · 면담 내용        → 선생님만 읽기
 //   학생 명단 · 누가기록           → 선생님만 읽고 쓰기 (가장 민감한 자료)
 
@@ -155,6 +156,8 @@ service cloud.firestore {
     // 신청한 기기(uid)가 같이 저장되고, 취소는 그 기기와 선생님만 할 수 있습니다.
     // (uid 가 없는 예전 예약은 선생님만 취소합니다.)
     // 학생은 오늘부터 3주 안의 날짜만 잡습니다(1년 치를 한꺼번에 채우는 장난 막기). 선생님은 날짜 제한 없음.
+    // 한 기기가 잡아 둘 수 있는 면담은 3건까지입니다. 신청할 때 같은 배치로 자기 장부(bookers/{uid})에
+    // 그 예약 id 를 적어야 하고, 장부에는 3건까지만 적힙니다(아래 bookers 규칙).
     function bookingDateOk(d) {
       let day = timestamp.date(int(d[0:4]), int(d[5:7]), int(d[8:10]));
       return day > request.time - duration.value(1, 'd')
@@ -169,7 +172,9 @@ service cloud.firestore {
                     && request.resource.data.client is string
                     && request.resource.data.client.size() <= 24
                     && request.resource.data.createdAt is int
-                    && (isTeacher() || bookingDateOk(request.resource.data.date))
+                    && (isTeacher()
+                        || (bookingDateOk(request.resource.data.date)
+                            && id in getAfter(/databases/$(database)/documents/bookers/$(request.auth.uid)).data.ids))
                     && request.resource.data.slot in ['am', 'lunch', 'pm', 'pm2']
                     && id == request.resource.data.date + '_' + request.resource.data.slot
                     && request.resource.data.uid is string
@@ -182,6 +187,46 @@ service cloud.firestore {
     function bookingOwnedByMe(id) {
       return exists(/databases/$(database)/documents/bookings/$(id))
           && get(/databases/$(database)/documents/bookings/$(id)).data.get('uid', '') == request.auth.uid;
+    }
+
+    // ── 면담 신청 장부: 기기(uid)마다 한 장, 지금 잡아 둔 예약 id 를 3건까지 ──
+    // 장부에 적힌 예약은 모두 ‘이 기기가 잡은, 실제로 있는 예약’이어야 합니다.
+    // 장부에서 지울 수 있는 것은 취소됐거나, 남이 다시 잡았거나, 날짜가 지난 예약뿐입니다.
+    // 그래서 예약을 그대로 둔 채 장부만 비워서 더 잡을 수는 없습니다.
+    function bookingDoc(bid) {
+      return /databases/$(database)/documents/bookings/$(bid);
+    }
+    function bookingPast(bid) {
+      return timestamp.date(int(bid[0:4]), int(bid[5:7]), int(bid[8:10])) < request.time - duration.value(1, 'd');
+    }
+    function listedMine(ids, i, uid) {
+      return ids.size() <= i
+          || (ids[i] is string
+              && existsAfter(bookingDoc(ids[i]))
+              && getAfter(bookingDoc(ids[i])).data.get('uid', '') == uid);
+    }
+    function mayDrop(old, i, now, uid) {
+      return old.size() <= i
+          || old[i] in now
+          || !existsAfter(bookingDoc(old[i]))
+          || getAfter(bookingDoc(old[i])).data.get('uid', '') != uid
+          || bookingPast(old[i]);
+    }
+    function bookerOk(uid) {
+      let ids = request.resource.data.ids;
+      return request.resource.data.keys().hasOnly(['ids', 'updatedAt'])
+          && ids is list
+          && ids.size() <= 3
+          && listedMine(ids, 0, uid) && listedMine(ids, 1, uid) && listedMine(ids, 2, uid);
+    }
+    match /bookers/{uid} {
+      allow read: if isTeacher() || (request.auth != null && request.auth.uid == uid);
+      allow create: if request.auth != null && request.auth.uid == uid && bookerOk(uid);
+      allow update: if request.auth != null && request.auth.uid == uid && bookerOk(uid)
+                    && mayDrop(resource.data.ids, 0, request.resource.data.ids, uid)
+                    && mayDrop(resource.data.ids, 1, request.resource.data.ids, uid)
+                    && mayDrop(resource.data.ids, 2, request.resource.data.ids, uid);
+      allow delete: if isTeacher();
     }
 
     // ── 면담 시간대 닫기: 누구나 읽기(‘닫힘’ 표시), 선생님만 닫고 열기 ──

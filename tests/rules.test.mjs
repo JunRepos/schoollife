@@ -1,0 +1,72 @@
+import {initializeTestEnvironment,assertFails,assertSucceeds} from '@firebase/rules-unit-testing';
+import {doc,setDoc,getDoc,deleteDoc,writeBatch,serverTimestamp,updateDoc,collection,getDocs} from 'firebase/firestore';
+import fs from 'fs';
+// firestore.rules 를 에뮬레이터에 올려 ‘누가 무엇을 할 수 있고 없는지’를 확인합니다. 돌리는 법은 README ‘규칙 시험’.
+const rules=fs.readFileSync(new URL('../firestore.rules',import.meta.url),'utf8').replace("'TEACHER_EMAIL'","'teacher@test.com'");
+const env=await initializeTestEnvironment({projectId:'demo-sl',firestore:{rules,host:'127.0.0.1',port:8085}});
+const kst=n=>new Date(Date.now()+9*3600e3+n*864e5).toISOString().slice(0,10);
+const T=env.authenticatedContext('tch',{email:'teacher@test.com'}).firestore();
+const A=env.authenticatedContext('anonA',{firebase:{sign_in_provider:'anonymous'}}).firestore();
+const B=env.authenticatedContext('anonB').firestore();
+const X=env.authenticatedContext('rando',{email:'rando@gmail.com'}).firestore();
+const BC=env.authenticatedContext('bcu',{email:'bc20607@example.com'}).firestore();
+const U=env.unauthenticatedContext().firestore();
+let pass=0,fail=0;
+const t=async(name,p)=>{try{await p;pass++;console.log('ok  ',name)}catch(e){fail++;console.log('FAIL',name,'-',String(e.message).slice(0,160))}};
+const ev={type:'etc',title:'장난',date:kst(1)};
+// --- 일정·전달사항: 선생님 말고는 아무도 못 씀 ---
+for(const [n,db] of [['비로그인',U],['익명',A],['아무 이메일 계정',X],['방송부 계정',BC]]){
+  await t(n+' 일정 올리기 거부',assertFails(setDoc(doc(db,'events/x1'),{...ev,by:'선생님',uid:'anonA',logId:'l1'})));
+  await t(n+' 일정+기록 배치 거부',assertFails((()=>{const b=writeBatch(db);b.set(doc(db,'events/x2'),{...ev,by:'선생님',uid:'anonA',logId:'l2'});b.set(doc(db,'eventLogs/l2'),{eventId:'x2',action:'create',uid:'anonA',by:'선생님',title:ev.title,date:ev.date,type:'etc',at:serverTimestamp()});return b.commit()})()));
+  await t(n+' 전달사항 쓰기 거부',assertFails(setDoc(doc(db,'notices/n1'),{title:'장난',body:'x'})));
+  await t(n+' 자료실 쓰기 거부',assertFails(setDoc(doc(db,'resources/r1'),{title:'x'})));
+  await t(n+' 1인1역 쓰기 거부',assertFails(setDoc(doc(db,'roles/current'),{list:[]})));
+  await t(n+' 명단 읽기 거부',assertFails(getDocs(collection(db,'students'))));
+  await t(n+' 성적 읽기 거부',assertFails(getDoc(doc(db,'grades/20607'))));
+  await t(n+' 누가기록 읽기 거부',assertFails(getDocs(collection(db,'records/20607/entries'))));
+  await t(n+' 일정 기록 읽기 거부',assertFails(getDocs(collection(db,'eventLogs'))));
+  await t(n+' 면담 사유 읽기 거부',assertFails(getDocs(collection(db,'bookingDetails'))));
+}
+// --- 선생님 ---
+const tb=writeBatch(T);tb.set(doc(T,'events/e1'),{...ev,title:'수행',by:'선생님',uid:'tch',logId:'L1'});
+tb.set(doc(T,'eventLogs/L1'),{eventId:'e1',action:'create',uid:'tch',by:'선생님',title:'수행',date:ev.date,type:'etc',memo:'',subject:'',photos:0,at:serverTimestamp()});
+await t('선생님 일정+기록 올리기',assertSucceeds(tb.commit()));
+await t('선생님도 기록 없이는 일정 못 올림',assertFails(setDoc(doc(T,'events/e9'),{...ev,by:'선생님',uid:'tch',logId:'L9'})));
+await t('선생님 전달사항 쓰기',assertSucceeds(setDoc(doc(T,'notices/n1'),{title:'공지',body:'x'})));
+await t('익명 일정 지우기 거부',assertFails(deleteDoc(doc(A,'events/e1'))));
+await t('익명 전달사항 고치기 거부',assertFails(updateDoc(doc(A,'notices/n1'),{title:'장난'})));
+await t('익명 전달사항 지우기 거부',assertFails(deleteDoc(doc(A,'notices/n1'))));
+await t('기록은 선생님도 못 고침',assertFails(updateDoc(doc(T,'eventLogs/L1'),{title:'x'})));
+await t('기록은 선생님도 못 지움',assertFails(deleteDoc(doc(T,'eventLogs/L1'))));
+// --- 면담 ---
+const bk=(db,uid,date,slot,ids)=>{const id=date+'_'+slot;const b=writeBatch(db);b.set(doc(db,'bookings/'+id),{date,slot,client:'c',uid,createdAt:1});if(ids)b.set(doc(db,'bookers/'+uid),{ids,updatedAt:1});return b.commit()};
+const id=(n,s)=>kst(n)+'_'+s;
+await t('비로그인 면담 신청 거부',assertFails(setDoc(doc(U,'bookings/'+id(1,'am')),{date:kst(1),slot:'am',client:'c',uid:'x',createdAt:1})));
+await t('장부 없이 면담 신청 거부',assertFails(bk(A,'anonA',kst(1),'am',null)));
+await t('면담 1건 신청',assertSucceeds(bk(A,'anonA',kst(1),'am',[id(1,'am')])));
+await t('사유 적기(신청 기기)',assertSucceeds(setDoc(doc(A,'bookingDetails/'+id(1,'am')),{name:'',klass:'20607',reason:'진로',client:'c',uid:'anonA',createdAt:1})));
+await t('남의 자리 사유 적기 거부',assertFails(setDoc(doc(B,'bookingDetails/'+id(1,'am')),{name:'',klass:'1',reason:'x',client:'c',uid:'anonB',createdAt:1})));
+await t('이미 찬 자리 신청 거부',assertFails(bk(B,'anonB',kst(1),'am',[id(1,'am')])));
+await t('남의 예약 취소 거부',assertFails(deleteDoc(doc(B,'bookings/'+id(1,'am')))));
+await t('장부만 적고 예약 안 하기 거부',assertFails(setDoc(doc(B,'bookers/anonB'),{ids:[id(2,'am')],updatedAt:1})));
+await t('남의 예약을 내 장부에 적기 거부',assertFails(setDoc(doc(B,'bookers/anonB'),{ids:[id(1,'am')],updatedAt:1})));
+await t('남의 장부 고치기 거부',assertFails(setDoc(doc(B,'bookers/anonA'),{ids:[],updatedAt:1})));
+await t('면담 2건째',assertSucceeds(bk(A,'anonA',kst(2),'am',[id(1,'am'),id(2,'am')])));
+await t('면담 3건째',assertSucceeds(bk(A,'anonA',kst(2),'pm',[id(1,'am'),id(2,'am'),id(2,'pm')])));
+await t('4건째 거부(장부 4칸)',assertFails(bk(A,'anonA',kst(3),'am',[id(1,'am'),id(2,'am'),id(2,'pm'),id(3,'am')])));
+await t('4건째 거부(살아 있는 예약을 장부에서 빼고)',assertFails(bk(A,'anonA',kst(3),'am',[id(2,'am'),id(2,'pm'),id(3,'am')])));
+await t('장부 비우기 거부(예약은 그대로)',assertFails(setDoc(doc(A,'bookers/anonA'),{ids:[],updatedAt:1})));
+await t('내 예약 취소',assertSucceeds(deleteDoc(doc(A,'bookings/'+id(1,'am')))));
+await t('취소 뒤 다시 신청(취소분 빼고)',assertSucceeds(bk(A,'anonA',kst(3),'am',[id(2,'am'),id(2,'pm'),id(3,'am')])));
+await t('3주 넘는 날짜 거부',assertFails(bk(B,'anonB',kst(30),'am',[id(30,'am')])));
+await t('지난 날짜 거부',assertFails(bk(B,'anonB',kst(-3),'am',[id(-3,'am')])));
+await t('없는 시간대 거부',assertFails(bk(B,'anonB',kst(4),'night',[id(4,'night')])));
+await t('남의 uid 로 신청 거부',assertFails(bk(B,'anonA',kst(4),'am',null)));
+await t('선생님 시간대 닫기',assertSucceeds(setDoc(doc(T,'closures/'+id(5,'am')),{date:kst(5),slot:'am'})));
+await t('닫힌 시간대 신청 거부',assertFails(bk(B,'anonB',kst(5),'am',[id(5,'am')])));
+await t('선생님은 장부 없이 대신 잡기',assertSucceeds(setDoc(doc(T,'bookings/'+id(6,'am')),{date:kst(6),slot:'am',client:'c',uid:'anonB',createdAt:1})));
+await t('선생님 남의 예약 취소',assertSucceeds(deleteDoc(doc(T,'bookings/'+id(2,'am')))));
+await t('선생님이 취소한 자리 빼고 다시 신청',assertSucceeds(bk(A,'anonA',kst(4),'pm',[id(2,'pm'),id(3,'am'),id(4,'pm')])));
+await t('방송부 계정도 장부 있어야 신청',assertFails(bk(BC,'bcu',kst(7),'am',null)));
+await t('방송부 계정 면담 신청',assertSucceeds(bk(BC,'bcu',kst(7),'am',[id(7,'am')])));
+console.log(`\n${pass} passed, ${fail} failed`);await env.cleanup();process.exit(fail?1:0);
